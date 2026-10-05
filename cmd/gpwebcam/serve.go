@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,6 +41,9 @@ const (
 	// after a replug the camera sometimes reports streaming and sends
 	// nothing (seen 2026-10-05, also upstream PR #76), and a new start fixes it.
 	firstFrame = 6 * time.Second
+	// startAgain is when a session without video sends START once more;
+	// video normally flows about 1.5 s after ffmpeg starts.
+	startAgain = 3 * time.Second
 )
 
 // Causes that end a session when its interface disappears.
@@ -432,6 +436,26 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 	go keepAlive(kctx, cam, f.httpTimeout, log)
 
 	var videoFlowing sync.Once
+	var gotVideo atomic.Bool
+	// A camera that reports streaming but sends nothing (seen right after
+	// another session's exit, 2026-10-05; also upstream PR #76) ignores a
+	// second START, because it already streams. Stop and start it while
+	// ffmpeg keeps listening, which is quicker than the watchdog's full
+	// restart.
+	restart := time.AfterFunc(startAgain, func() {
+		if gotVideo.Load() || ctx.Err() != nil {
+			return
+		}
+		log.Info("no video yet, stopping and starting the camera again")
+		err := cam.Stop(ctx)
+		if err == nil {
+			err = cam.Start(ctx, f.res, f.fov, f.port)
+		}
+		if err != nil && ctx.Err() == nil {
+			log.Warn("restart camera", "err", err)
+		}
+	})
+	defer restart.Stop()
 	err = stream.Run(ctx, stream.Config{
 		FFmpeg:      f.ffmpeg,
 		Listen:      netip.AddrPortFrom(host.Addr(), f.port),
@@ -445,6 +469,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 			return nil // ending: leave the device to the placeholder
 		}
 		videoFlowing.Do(func() {
+			gotVideo.Store(true)
 			log.Info("video is flowing")
 			s.notify.Send(notify.Low, modelName(iface)+" connected",
 				fmt.Sprintf("Streaming %sp with the %s field of view.", f.res, f.fov))
