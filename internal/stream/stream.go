@@ -1,5 +1,5 @@
 // Package stream runs ffmpeg, which receives the camera's MPEG-TS stream over
-// UDP and writes raw frames into a v4l2loopback device.
+// UDP, decodes it and hands gw raw frames through a pipe.
 package stream
 
 import (
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -19,7 +20,9 @@ import (
 type Config struct {
 	FFmpeg string         // ffmpeg executable, looked up in PATH if it has no slash
 	Listen netip.AddrPort // host address on the GoPro link; never unspecified
-	Device string         // e.g. /dev/video42
+	// Width and Height are the size of the frames gw gets; ffmpeg scales
+	// to them, so they always match the loopback device's format.
+	Width, Height int
 	// ReadTimeout makes ffmpeg exit when no packet arrives for this long,
 	// for example after the camera is unplugged. While opening the input,
 	// ffmpeg reads several times, so with no stream at all it gives up
@@ -40,11 +43,17 @@ func (c Config) Validate() error {
 	if c.ReadTimeout <= 0 {
 		return fmt.Errorf("read timeout must be positive")
 	}
-	if c.Device == "" || c.FFmpeg == "" {
-		return fmt.Errorf("device and ffmpeg path must be set")
+	if c.Width <= 0 || c.Height <= 0 || c.Width%2 != 0 || c.Height%2 != 0 {
+		return fmt.Errorf("frame size %dx%d: must be positive and even", c.Width, c.Height)
+	}
+	if c.FFmpeg == "" {
+		return fmt.Errorf("ffmpeg path must be set")
 	}
 	return nil
 }
+
+// FrameSize is the length in bytes of one yuv420p frame.
+func (c Config) FrameSize() int { return c.Width * c.Height * 3 / 2 }
 
 // Args returns ffmpeg's argument list, without the program name.
 func (c Config) Args() []string {
@@ -70,24 +79,31 @@ func (c Config) Args() []string {
 		// The TS also carries AAC, an empty AC3 track and a private data
 		// stream; only the video goes to the loopback device.
 		"-map", "0:v:0",
-		"-vf", "format=yuv420p",
-		"-f", "v4l2",
-		c.Device,
+		"-vf", fmt.Sprintf("scale=%d:%d,format=yuv420p", c.Width, c.Height),
+		"-f", "rawvideo",
+		// Without this the tail of each frame waits in ffmpeg's output
+		// buffer until the next frame arrives.
+		"-flush_packets", "1",
+		"pipe:1",
 	}
 }
 
-// Run starts ffmpeg and waits for it to exit. Cancelling ctx sends SIGTERM,
-// then SIGKILL after grace. ffmpeg's stderr is copied to logs.
-func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration) error {
+// Run starts ffmpeg and passes every decoded frame to sink until ffmpeg
+// exits. The slice is reused for the next frame. Cancelling ctx sends
+// SIGTERM, then SIGKILL after grace; a sink error stops ffmpeg the same way.
+// ffmpeg's stderr is copied to logs.
+func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sink func([]byte) error) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	return runArgs(ctx, c.FFmpeg, c.Args(), logs, grace, c.ReadTimeout)
-}
-
-func runArgs(ctx context.Context, ffmpeg string, args []string, logs io.Writer, grace, readTimeout time.Duration) error {
-	cmd := exec.CommandContext(ctx, ffmpeg, args...)
-	cmd.Stdout = logs
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(runCtx, c.FFmpeg, c.Args()...)
+	cmd.Stdout = w
 	cmd.Stderr = logs
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = grace
@@ -98,18 +114,43 @@ func runArgs(ctx context.Context, ffmpeg string, args []string, logs io.Writer, 
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if err := cmd.Start(); err != nil {
+		r.Close()
+		w.Close()
 		return fmt.Errorf("start ffmpeg: %w", err)
 	}
-	err := cmd.Wait()
-	if ctx.Err() != nil {
+	// ffmpeg holds the write end now; reads see EOF once it exits.
+	w.Close()
+
+	var sinkErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer r.Close() // an early return makes ffmpeg's next write fail
+		frame := make([]byte, c.FrameSize())
+		for {
+			if _, err := io.ReadFull(r, frame); err != nil {
+				return
+			}
+			if err := sink(frame); err != nil {
+				sinkErr = err
+				cancel()
+				return
+			}
+		}
+	}()
+	err = cmd.Wait()
+	<-done
+	switch {
+	case ctx.Err() != nil:
 		// Stopped on request; ffmpeg's exit status after SIGTERM is noise.
 		return nil
-	}
-	if err != nil {
+	case sinkErr != nil:
+		return fmt.Errorf("write frame: %w", sinkErr)
+	case err != nil:
 		return fmt.Errorf("ffmpeg: %w", err)
 	}
 	// With UDP input ffmpeg ends cleanly only when the read timeout fires.
-	return fmt.Errorf("no video from the camera for %v; was it unplugged or switched off?", readTimeout)
+	return fmt.Errorf("no video from the camera for %v; was it unplugged or switched off?", c.ReadTimeout)
 }
 
 // Port parses and range-checks a UDP port given as text.

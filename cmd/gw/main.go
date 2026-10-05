@@ -3,25 +3,19 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
-	"net/netip"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/darkodemic/gw/internal/camera"
 	"github.com/darkodemic/gw/internal/stream"
 	"github.com/darkodemic/gw/internal/usbnet"
-	"github.com/darkodemic/gw/internal/v4l2"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -30,7 +24,9 @@ var version = "dev"
 const usage = `usage: gw <command> [flags]
 
 commands:
-  start     stream the camera into a v4l2loopback device
+  run       keep the loopback device fed: camera video whenever a GoPro
+            is connected, a placeholder picture otherwise (service mode)
+  start     stream one camera session, then exit
   list      list GoPro network interfaces
   version   print the version
 
@@ -53,8 +49,10 @@ func run(args []string, stdout io.Writer, log *slog.Logger) error {
 		return flag.ErrHelp
 	}
 	switch args[0] {
+	case "run":
+		return cmdServe(args[1:], log, false)
 	case "start":
-		return cmdStart(args[1:], log)
+		return cmdServe(args[1:], log, true)
 	case "list":
 		return cmdList(args[1:], stdout)
 	case "version":
@@ -87,6 +85,7 @@ func cmdList(args []string, stdout io.Writer) error {
 	return nil
 }
 
+// startFlags are the flags of both run and start.
 type startFlags struct {
 	iface       string
 	res         camera.Resolution
@@ -99,9 +98,9 @@ type startFlags struct {
 	httpTimeout time.Duration
 }
 
-func parseStart(args []string) (startFlags, error) {
+func parseStart(name string, args []string) (startFlags, error) {
 	f := startFlags{res: camera.Res1080, fov: camera.FOVLinear, port: 8554}
-	fs := flag.NewFlagSet("start", flag.ContinueOnError)
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.StringVar(&f.iface, "iface", "", "GoPro network interface (default: the only one found in sysfs)")
 	fs.Var(&f.res, "res", "resolution: 1080 or 720")
 	fs.Var(&f.fov, "fov", "field of view: wide, narrow, superview or linear")
@@ -140,6 +139,9 @@ func parseStart(args []string) (startFlags, error) {
 	return f, nil
 }
 
+// errNoCamera means no GoPro interface is present right now.
+var errNoCamera = fmt.Errorf("no GoPro network interface (USB vendor %s) found; is the camera on and set to GoPro Connect?", usbnet.GoProVendorID)
+
 func findIface(name string) (usbnet.Interface, error) {
 	if name != "" {
 		return usbnet.Lookup(usbnet.DefaultSysfs, name)
@@ -150,7 +152,7 @@ func findIface(name string) (usbnet.Interface, error) {
 	}
 	switch len(found) {
 	case 0:
-		return usbnet.Interface{}, fmt.Errorf("no GoPro network interface (USB vendor %s) found; is the camera on and set to GoPro Connect?", usbnet.GoProVendorID)
+		return usbnet.Interface{}, errNoCamera
 	case 1:
 		return found[0], nil
 	default:
@@ -159,128 +161,5 @@ func findIface(name string) (usbnet.Interface, error) {
 			names[i] = f.Name
 		}
 		return usbnet.Interface{}, fmt.Errorf("several GoPro interfaces (%s); choose one with -iface", strings.Join(names, ", "))
-	}
-}
-
-func cmdStart(args []string, log *slog.Logger) error {
-	f, err := parseStart(args)
-	if err != nil {
-		return err
-	}
-	device, err := v4l2.DevicePath(f.videoNr)
-	if err != nil {
-		return err
-	}
-	info, err := v4l2.CheckLoopback(device)
-	if err != nil {
-		return err
-	}
-	iface, err := findIface(f.iface)
-	if err != nil {
-		return err
-	}
-	log.Info("found camera", "iface", iface.Name, "product", iface.Product, "device", device, "card", info.Card)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	// After the first signal, a second one kills gw at once, in case
-	// stopping the camera hangs; ffmpeg dies with it through Pdeathsig.
-	go func() {
-		<-ctx.Done()
-		stop()
-	}()
-
-	waitCtx, cancel := context.WithTimeout(ctx, f.dhcpWait)
-	host, err := usbnet.WaitIPv4(waitCtx, iface.Name, 250*time.Millisecond)
-	cancel()
-	if err != nil {
-		return interrupted(ctx, err, log)
-	}
-	camAddr, err := camera.AddressFor(host)
-	if err != nil {
-		return err
-	}
-	log.Info("link is up", "host", host, "camera", camAddr)
-
-	cam := camera.NewClient(netip.AddrPortFrom(camAddr, camera.HTTPPort), host.Addr(), f.httpTimeout)
-	err = cam.StartWebcam(ctx, camera.StartOptions{
-		Res:       f.res,
-		FOV:       f.fov,
-		Port:      f.port,
-		Poll:      500 * time.Millisecond,
-		Connect:   f.connectWait,
-		Streaming: 10 * time.Second,
-	})
-	// Stop even after a failed start: the camera may be half way into
-	// webcam mode.
-	defer func() {
-		// An unplugged camera has nothing left to stop.
-		if _, err := net.InterfaceByName(iface.Name); err != nil {
-			log.Info("camera is gone, nothing to stop", "iface", iface.Name)
-			return
-		}
-		// ctx may already be cancelled; STOP gets its own short deadline.
-		sctx, cancel := context.WithTimeout(context.Background(), 2*f.httpTimeout)
-		defer cancel()
-		if err := cam.StopWebcam(sctx); err != nil {
-			log.Warn("stop webcam", "err", err)
-		} else {
-			log.Info("webcam stopped")
-		}
-	}()
-	if err != nil {
-		return interrupted(ctx, err, log)
-	}
-	log.Info("webcam started", "res", f.res, "fov", f.fov, "port", f.port)
-
-	kctx, cancelKeepAlive := context.WithCancel(ctx)
-	defer cancelKeepAlive()
-	go keepAlive(kctx, cam, f.httpTimeout, log)
-
-	err = stream.Run(ctx, stream.Config{
-		FFmpeg:      f.ffmpeg,
-		Listen:      netip.AddrPortFrom(host.Addr(), f.port),
-		Device:      device,
-		ReadTimeout: 5 * time.Second,
-	}, os.Stderr, 3*time.Second)
-	cancelKeepAlive()
-	if err == nil {
-		log.Info("stopped on signal")
-	}
-	return err
-}
-
-// interrupted turns an error caused by a signal into a clean exit.
-func interrupted(ctx context.Context, err error, log *slog.Logger) error {
-	if ctx.Err() != nil {
-		log.Info("stopped on signal")
-		return nil
-	}
-	return err
-}
-
-// keepAlive pings the camera every KeepAliveInterval, as the spec asks, and
-// logs only when the result changes.
-func keepAlive(ctx context.Context, cam *camera.Client, timeout time.Duration, log *slog.Logger) {
-	t := time.NewTicker(camera.KeepAliveInterval)
-	defer t.Stop()
-	failing := false
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		rctx, cancel := context.WithTimeout(ctx, timeout)
-		err := cam.KeepAlive(rctx)
-		cancel()
-		switch {
-		case err != nil && ctx.Err() == nil && !failing:
-			log.Warn("keep-alive failed", "err", err)
-			failing = true
-		case err == nil && failing:
-			log.Info("keep-alive works again")
-			failing = false
-		}
 	}
 }

@@ -27,6 +27,16 @@ func (r Resolution) code() int {
 	}
 }
 
+// Size is the frame size of the stream at this resolution.
+func (r Resolution) Size() (width, height int) {
+	switch r {
+	case Res720:
+		return 1280, 720
+	default:
+		return 1920, 1080
+	}
+}
+
 func (r *Resolution) String() string { return string(*r) }
 
 // Set implements flag.Value.

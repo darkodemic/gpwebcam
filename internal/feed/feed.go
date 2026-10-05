@@ -1,0 +1,74 @@
+// Package feed keeps the loopback device supplied with frames: live camera
+// frames when there are any, a placeholder frame otherwise. One producer
+// that never closes the device keeps it listed as a camera.
+package feed
+
+import (
+	"context"
+	"sync"
+	"time"
+)
+
+// Sink takes complete frames, e.g. *v4l2.Output.
+type Sink interface {
+	WriteFrame([]byte) error
+}
+
+// Feed writes to one Sink, either the idle frame on a timer or live frames
+// as they arrive.
+type Feed struct {
+	sink     Sink
+	interval time.Duration
+
+	mu   sync.Mutex
+	idle []byte // nil while live frames flow
+	err  error  // last write error of the idle loop
+}
+
+// New returns a Feed that repeats the idle frame every interval.
+func New(sink Sink, interval time.Duration) *Feed {
+	return &Feed{sink: sink, interval: interval}
+}
+
+// Idle switches to repeating frame until the next Live call. The first
+// copy is written at once, so the device has a picture immediately.
+func (f *Feed) Idle(frame []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.idle = frame
+	return f.sink.WriteFrame(frame)
+}
+
+// Live writes a camera frame and stops the idle repeats.
+func (f *Feed) Live(frame []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.idle = nil
+	return f.sink.WriteFrame(frame)
+}
+
+// Run repeats the idle frame until ctx ends. Write errors are kept for Err;
+// a missing device ends the process elsewhere.
+func (f *Feed) Run(ctx context.Context) {
+	t := time.NewTicker(f.interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		f.mu.Lock()
+		if f.idle != nil {
+			f.err = f.sink.WriteFrame(f.idle)
+		}
+		f.mu.Unlock()
+	}
+}
+
+// Err returns the last error of an idle write, or nil.
+func (f *Feed) Err() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.err
+}

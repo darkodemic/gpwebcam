@@ -157,10 +157,13 @@ Provereno 2026-10-05: radi kernel `7.2.8-arch1-2`, isti kao `linux`, `linux-head
 - 2026-10-04: restart u kernel 7.2.8, instaliran `v4l2loopback-dkms`.
 - 2026-10-05: `gw start` radi na kameri: 1080p30 na `/dev/video42` za oko 4 s; Ctrl+C vraća kameru u Off; posle `kill -9` sledeći start sam zaustavi zaostali stream; posle izvlačenja kabla `gw` izađe za oko 5.7 s (`first-slice-gw-start.md` §7.1).
 
+- 2026-10-05: prvi commit `775cf97` na `main`. Napisan `README.md` (opis, build, podešavanje, upotreba, rešavanje problema); čeka Darkove izmene pre commit-a.
+- 2026-10-05: Zoom ne vidi kameru ako je pokrenut pre `gw`-a; rešenje je `gw` kao jedini pisac u uređaj sa zamenskom slikom i `gw run` kao user servis (ADR 0003, `second-slice-gw-run.md`). Merenje kašnjenja: kamera direktno 0.25 s, kroz `gw` oko 1.1 s (`first-slice-gw-start.md` §7.2).
+
 Sledeće:
 
-1. Prvi commit, kad Darko odobri plan.
-2. Sledeći presek (`first-slice-gw-start.md` §8): watchdog za pakete, provera rute, udev i systemd, instalacija.
+1. Uzrok kašnjenja od oko 0.8 s na putu kroz `gw`, pa ručni testovi za `gw run` i servis (`second-slice-gw-run.md` §3, §4).
+2. Ostatak iz `first-slice-gw-start.md` §8: watchdog za pakete, provera rute, instalacija.
 
 ## 10. Ideje za kasnije
 

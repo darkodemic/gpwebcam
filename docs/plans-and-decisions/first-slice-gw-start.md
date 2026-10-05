@@ -159,15 +159,45 @@ HERO13 Black, `/gopro/camera/info` vraća model 65 i firmver `H24.01.02.10.00`. 
 | 6 | Posle `kill -9` ffmpeg umre zajedno sa `gw`-om (`Pdeathsig`), a kamera nastavi da šalje (`status 2`). Sledeći `gw start` zaustavi zaostali stream i za 4.1 s daje 30 fps. |
 | 5 | Kabl izvučen dok stream radi: interfejs nestane, a `gw` izađe sa kodom 1 posle 5.65 s, zbog read timeout-a od 5 s. ffmpeg ne ostane. ffmpeg je izašao sa kodom 0, pa je poruka bila samo "ffmpeg exited". Stop i exit su pali na `bind: cannot assign requested address`, jer adresa hosta više ne postoji. Ispravljeno odmah posle testa: poruka sada kaže da 5 s nema videa i pita da li je kamera isključena, a stop se preskače kad interfejs više ne postoji. Pokriveno testom `TestRunStreamStops`; isključivanje kabla posle ispravke nije ponovljeno. |
 
+### 7.2 Zoom i kašnjenje, 2026-10-05
+
+**Zoom ne vidi kameru dok se ne restartuje.** Kad radi bez `gw`-a, `/dev/video42` prijavljuje samo "Video Output", jer je modul učitan sa `exclusive_caps=1`. Dok ffmpeg piše, prijavljuje "Video Capture", a kad ffmpeg izađe, vraća se na "Video Output". Na ovu promenu kernel ne šalje nijedan udev događaj (`udevadm monitor --kernel --udev --subsystem-match=video4linux` nije video ništa). Zoom pregleda uređaje pri pokretanju, pa kameru vidi samo ako je `gw` već radio kad je Zoom krenuo.
+
+**Kašnjenje.** Darko je u Zoom-ovom preview-u video nekoliko sekundi kašnjenja, mnogo više nego sa običnom USB kamerom. Merenja:
+
+| Šta | Kako | Rezultat |
+|---|---|---|
+| ffmpeg deo `gw`-a | lokalni test-stream (H.264 1080p30 preko UDP-a); wall-clock svakog frejma kod pošiljaoca i primaoca, upareno po PTS-u (`showinfo`, `-loglevel +datetime`) | 70 ms sa `gw`-ovim opcijama; 570 ms bez `-flags low_delay`, jer dekoder na 32 jezgra koristi frame threading; bez ikakvih opcija prvi frejmovi kasne 4.6 s |
+| ceo lanac do ekrana | GoPro usmeren u ffplay prozor sa satom u milisekundama; snimak ekrana (`grim`) pokazuje pravi sat i sat kroz kameru u ffplay prozoru na `/dev/video42` | 1.02 do 1.07 s na pet snimaka; linear, 1080p |
+| Zoom | | nije izmereno; Zoom nije bio na snimku |
+
+Isti način merenja, ponovljen kasnije 2026-10-05 sa novim `gw run`/`gw start` (frejmovi kroz pipe u `gw`, §8), po jedan snimak po podešavanju:
+
+| Put | Podešavanje | Kašnjenje |
+|---|---|---|
+| `gw` → `/dev/video42` → ffplay | linear 1080p | 1.12 s (stari `gw`: 1.13 s) |
+| isto | wide 1080p | 0.97 s |
+| isto | narrow 1080p | 1.03 s |
+| isto | superview 1080p | 1.15 s |
+| isto | linear 720p | 1.20 s |
+| isto | wide 720p | 1.12 s |
+| kamera → ffplay direktno, TS preko UDP-a, bez `gw`-a | linear 1080p | 0.25 s |
+| kamera → ffplay direktno, `protocol=RTSP` | linear 1080p | 0.18 s |
+| kamera → ffplay direktno, `webcam/preview` | | 0.18 s |
+
+Zaključak: kamera je brza, blizu GoPro-ovih 210 ms, a FOV i rezolucija ne menjaju mnogo. **Oko 0.8 s dodaje put kroz `gw`**: ffmpeg u `gw`-u, v4l2loopback ili čitač `/dev/video42`. Ranija procena da je to kamera bila je pogrešna; lokalni test od 70 ms merio je samo dekodiranje, bez puta kroz v4l2. Pipe u novom `gw`-u ne menja ništa: stari i novi put daju isto. Uzrok još nije nađen. Sledeći korak je drugi čitač (`mpv` sa low-latency profilom), pa merenje vremena od UDP paketa do upisa frejma u `gw`-ovom ffmpeg-u na pravom streamu. Zoom još nije izmeren.
+
 ## 8. Sledeći presek
 
 Iz `upstream-issues-review.md` §2:
 
 - Watchdog: ako posle START-a nema paketa 3 do 5 s, ponoviti START nekoliko puta, pa prijaviti da paketi ne stižu (firewall ili VPN).
 - Provera da ruta ka kameri ide preko GoPro interfejsa.
+- Zamenski frejm ("kamera nije priključena") u `/dev/video42` dok kamere nema, istog formata kao stream. Tako je uređaj uvek "Video Capture", i Zoom ga vidi bez restarta (§7.2). Uz to ide `gw` kao dugotrajan servis. Prešlo u `second-slice-gw-run.md` i ADR 0003.
+- Kašnjenje: izmeriti wide i linear FOV, 720p i `protocol=RTSP`, i koliko dodaje Zoom (§7.2).
 - Manje šuma u logu: upozorenja ffmpeg-a za stream 2 i 3 i za `yuvj420p` (§7.1) pojave se pri svakom startu.
 - Poruka "izvuci i vrati kabl" kad interfejs postoji, a HTTP ne odgovara (#74).
-- udev pravilo po vendor ID-u sa `SYSTEMD_WANTS`, `gw@.service` sa `BindsTo` i sandboxing-om, `modprobe.d` sa rezervnim uređajem za OBS, NetworkManager keyfile za GoPro interfejse.
+- `modprobe.d` sa rezervnim uređajem za OBS, NetworkManager keyfile za GoPro interfejse. Umesto udev pravila sa `SYSTEMD_WANTS` i sistemskog `gw@.service` biće user servis koji sam čeka kameru (ADR 0003).
 
 ## 9. Gde smo i šta sledi
 
