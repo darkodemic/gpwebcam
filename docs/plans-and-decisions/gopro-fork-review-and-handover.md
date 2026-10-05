@@ -161,3 +161,29 @@ Sledeće:
 
 1. Prvi commit, kad Darko odobri plan.
 2. Sledeći presek (`first-slice-gw-start.md` §8): watchdog za pakete, provera rute, udev i systemd, instalacija.
+
+## 10. Ideje za kasnije
+
+Predložio Darko 2026-10-05. Još nisu planirane ni odlučene.
+
+### 10.1 Notifikacije na desktopu
+
+Obaveštenje kad se kamera priključi, kad stream krene i kad se kamera isključi ili stream nestane. Uz to i greške koje korisnik može da popravi: nema IP adrese, pogrešna mreža, ne stižu paketi.
+
+- Standard je `org.freedesktop.Notifications` na session D-Bus-u. Na Darkovoj mašini ga pruža Quickshell, a postoje i `notify-send` i `gdbus` (provereno 2026-10-05).
+- Go standardna biblioteka nema D-Bus. Opcije su:
+  - `notify-send` preko `os/exec`, sa listom argumenata i bez shell-a;
+  - `github.com/godbus/dbus/v5`, prva spoljna zavisnost;
+  - sopstveni minimalni D-Bus klijent, što je verovatno previše posla.
+- Session bus postoji samo za korisnika, pa ovo radi ako `gw` radi kao systemd user servis, a ne kao sistemski. To se slaže sa principom "bez root-a u radu" (§4). Treba proveriti da li udev može da pokrene user servis preko `ENV{SYSTEMD_USER_WANTS}`.
+
+### 10.2 Snimanje
+
+`gw record` ili opcija uz `start` koja snima stream kamere u fajl.
+
+- Snima se H.264 stream sa kamere bez ponovnog kodiranja (`-map 0:v:0 -c copy`), a ne dekodirani frejmovi sa `/dev/video42`. Tako nema gubitka kvaliteta, a procesor skoro ne radi. Snimci iz testa od 2026-10-05 išli su preko `/dev/video42` samo zato što je to bila provera uređaja.
+- Webcam i snimanje mogu istovremeno iz jednog ffmpeg-a sa dva izlaza: dekodirano u v4l2loopback i kopija u fajl. Postoje i `tee` muxer i dva izlaza sa `-map`.
+- Kontejner je Matroska (`.mkv`), jer ostaje čitljiv i kad snimanje prekine izvučen kabl. Običan MP4 tada nema `moov` atom i ne može da se pusti; alternativa je fragmentisan MP4. ffmpeg 9.0.2 ima `matroska`, `mp4` i `mpegts` muxere.
+- Oko 6 Mb/s je oko 2.7 GB na sat. Webcam režim nema zvuk (§2), pa snimak nema zvuk.
+- Snimanje na microSD karticu kamere je druga stvar (preset-i i shutter preko Open GoPro API-ja), i nije deo webcam režima.
+
