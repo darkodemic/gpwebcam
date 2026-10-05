@@ -4,6 +4,7 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -11,9 +12,14 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
+
+// ErrNoVideo means the camera reported a running stream, but no frame
+// arrived within Config.FirstFrame.
+var ErrNoVideo = errors.New("the camera reports streaming, but no video arrived; a firewall or VPN may be dropping UDP, or the camera did not really start")
 
 // Config describes one ffmpeg run. Every field is validated by the caller's
 // types or by Validate, so nothing unchecked reaches the argument list.
@@ -28,6 +34,11 @@ type Config struct {
 	// ffmpeg reads several times, so with no stream at all it gives up
 	// after about four timeouts (measured with ffmpeg 9.0.2).
 	ReadTimeout time.Duration
+	// FirstFrame, when positive, ends the run with ErrNoVideo if no frame
+	// arrives this long after ffmpeg starts. It catches a camera that
+	// reports streaming but sends nothing much sooner than ReadTimeout,
+	// which ffmpeg applies several times while it opens the input.
+	FirstFrame time.Duration
 }
 
 // Validate rejects configurations that would make ffmpeg listen beyond the
@@ -79,6 +90,11 @@ func (c Config) Args() []string {
 		// The TS also carries AAC, an empty AC3 track and a private data
 		// stream; only the video goes to the loopback device.
 		"-map", "0:v:0",
+		// Hand on every frame as soon as it is decoded. The default for
+		// raw video output is constant frame rate, which held the camera's
+		// frames back by about 0.85 s (measured 2026-10-05: 1.02 s from
+		// scene to screen with the default, 0.18 s with passthrough).
+		"-fps_mode", "passthrough",
 		"-vf", fmt.Sprintf("scale=%d:%d,format=yuv420p", c.Width, c.Height),
 		"-f", "rawvideo",
 		// Without this the tail of each frame waits in ffmpeg's output
@@ -122,6 +138,16 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	w.Close()
 
 	var sinkErr error
+	var gotFrame, noVideo atomic.Bool
+	if c.FirstFrame > 0 {
+		t := time.AfterFunc(c.FirstFrame, func() {
+			if !gotFrame.Load() {
+				noVideo.Store(true)
+				cancel()
+			}
+		})
+		defer t.Stop()
+	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -131,6 +157,7 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 			if _, err := io.ReadFull(r, frame); err != nil {
 				return
 			}
+			gotFrame.Store(true)
 			if err := sink(frame); err != nil {
 				sinkErr = err
 				cancel()
@@ -146,6 +173,8 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 		return nil
 	case sinkErr != nil:
 		return fmt.Errorf("write frame: %w", sinkErr)
+	case noVideo.Load():
+		return fmt.Errorf("%w (waited %v)", ErrNoVideo, c.FirstFrame)
 	case err != nil:
 		return fmt.Errorf("ffmpeg: %w", err)
 	}

@@ -185,7 +185,7 @@ Isti način merenja, ponovljen kasnije 2026-10-05 sa novim `gw run`/`gw start` (
 | kamera → ffplay direktno, `protocol=RTSP` | linear 1080p | 0.18 s |
 | kamera → ffplay direktno, `webcam/preview` | | 0.18 s |
 
-Zaključak: kamera je brza, blizu GoPro-ovih 210 ms, a FOV i rezolucija ne menjaju mnogo. **Oko 0.8 s dodaje put kroz `gw`**: ffmpeg u `gw`-u, v4l2loopback ili čitač `/dev/video42`. Ranija procena da je to kamera bila je pogrešna; lokalni test od 70 ms merio je samo dekodiranje, bez puta kroz v4l2. Pipe u novom `gw`-u ne menja ništa: stari i novi put daju isto. Uzrok još nije nađen. Sledeći korak je drugi čitač (`mpv` sa low-latency profilom), pa merenje vremena od UDP paketa do upisa frejma u `gw`-ovom ffmpeg-u na pravom streamu. Zoom još nije izmeren.
+Zaključak: kamera je brza, blizu GoPro-ovih 210 ms, a FOV i rezolucija ne menjaju mnogo. **Oko 0.8 s dodaje put kroz `gw`**: ffmpeg u `gw`-u, v4l2loopback ili čitač `/dev/video42`. Ranija procena da je to kamera bila je pogrešna; lokalni test od 70 ms merio je samo dekodiranje, bez puta kroz v4l2. Pipe u novom `gw`-u ne menja ništa: stari i novi put daju isto. Uzrok je nađen istog dana: ffmpeg-ov podrazumevani CFR režim za izlaz u `v4l2` i `rawvideo` držao je frejmove oko 0.85 s. Sa `-fps_mode passthrough` kašnjenje kroz `gw` je 0.18 s, i u Zoom-u takođe (`second-slice-gw-run.md` §4).
 
 ## 8. Sledeći presek
 

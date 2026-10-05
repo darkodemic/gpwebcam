@@ -40,6 +40,9 @@ func TestArgs(t *testing.T) {
 	if j := slices.Index(args, "-vf"); j < 0 || args[j+1] != "scale=1920:1080,format=yuv420p" {
 		t.Errorf("video filter missing or wrong: %q", args)
 	}
+	if j := slices.Index(args, "-fps_mode"); j < 0 || j < i || args[j+1] != "passthrough" {
+		t.Errorf("output must pass frames through without frame rate conversion: %q", args)
+	}
 	if !slices.Contains(args, "-flush_packets") || args[len(args)-1] != "pipe:1" {
 		t.Errorf("output must be flushed raw video on stdout: %q", args)
 	}
@@ -101,6 +104,28 @@ func TestRunTimesOut(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ffmpeg") {
 		t.Errorf("error %q does not name ffmpeg", err)
+	}
+}
+
+// TestRunNoFirstFrame: with nothing sending, FirstFrame must end the run
+// with ErrNoVideo long before ffmpeg's own read timeouts.
+func TestRunNoFirstFrame(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	c := testConfig()
+	c.Listen = netip.MustParseAddrPort("127.0.0.1:47558")
+	c.ReadTimeout = 30 * time.Second
+	c.FirstFrame = time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	start := time.Now()
+	err := Run(ctx, c, &bytes.Buffer{}, time.Second, noFrames(t))
+	if !errors.Is(err, ErrNoVideo) {
+		t.Fatalf("Run = %v, want ErrNoVideo", err)
+	}
+	if d := time.Since(start); d > 4*time.Second {
+		t.Errorf("gave up after %v", d)
 	}
 }
 

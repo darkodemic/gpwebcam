@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,7 +29,12 @@ const (
 	pollInterval = 500 * time.Millisecond
 	// retryDelay is the pause before a new session when the last one failed
 	// with the camera still connected.
-	retryDelay = 5 * time.Second
+	retryDelay = 2 * time.Second
+	// firstFrame is how long a session waits for video after the camera
+	// reports streaming. Frames normally arrive about 1.5 s after start;
+	// after a replug the camera sometimes reports streaming and sends
+	// nothing (seen 2026-10-05, also upstream PR #76), and a new start fixes it.
+	firstFrame = 6 * time.Second
 )
 
 // errUnplugged ends a session whose interface disappeared.
@@ -42,6 +48,8 @@ type server struct {
 	feed   *feed.Feed
 	width  int
 	height int
+
+	mu     sync.Mutex
 	frames map[string][]byte // rendered placeholders by status line
 }
 
@@ -86,6 +94,9 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	s := &server{f: f, log: log, feed: feed.New(out, idleInterval), width: w, height: h, frames: map[string][]byte{}}
 	go s.feed.Run(ctx)
 	log.Info("feeding loopback device", "device", device, "size", fmt.Sprintf("%dx%d", w, h))
+	for _, st := range []string{placeholder.NotConnected, placeholder.Connecting, placeholder.Retrying} {
+		s.placeholder(ctx, st)
+	}
 
 	if once {
 		s.show(ctx, placeholder.Connecting)
@@ -145,19 +156,25 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 	}
 }
 
+// placeholder returns the frame for a status line, rendering it once.
+func (s *server) placeholder(ctx context.Context, status string) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if frame, ok := s.frames[status]; ok {
+		return frame
+	}
+	frame, err := placeholder.Render(ctx, s.f.ffmpeg, s.width, s.height, status)
+	if err != nil {
+		s.log.Warn("render placeholder, using a blank frame", "err", err)
+		frame = placeholder.Blank(s.width, s.height)
+	}
+	s.frames[status] = frame
+	return frame
+}
+
 // show switches the device to the placeholder with the given status line.
 func (s *server) show(ctx context.Context, status string) {
-	frame, ok := s.frames[status]
-	if !ok {
-		var err error
-		frame, err = placeholder.Render(ctx, s.f.ffmpeg, s.width, s.height, status)
-		if err != nil {
-			s.log.Warn("render placeholder, using a blank frame", "err", err)
-			frame = placeholder.Blank(s.width, s.height)
-		}
-		s.frames[status] = frame
-	}
-	if err := s.feed.Idle(frame); err != nil {
+	if err := s.feed.Idle(s.placeholder(ctx, status)); err != nil {
 		s.log.Warn("write placeholder", "err", err)
 	}
 }
@@ -169,6 +186,14 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	go watchIface(ctx, iface.Name, cancel)
+	go func() {
+		// Show the placeholder as soon as the cable is out, not when
+		// ffmpeg has finished exiting.
+		<-ctx.Done()
+		if errors.Is(context.Cause(ctx), errUnplugged) {
+			s.show(parent, placeholder.NotConnected)
+		}
+	}()
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, f.dhcpWait)
 	host, err := usbnet.WaitIPv4(waitCtx, iface.Name, 250*time.Millisecond)
@@ -190,6 +215,9 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		Poll:      500 * time.Millisecond,
 		Connect:   f.connectWait,
 		Streaming: 10 * time.Second,
+		OnStatus: func(st camera.WebcamStatus) {
+			log.Info("camera webcam status before start", "status", st)
+		},
 	})
 	// Stop even after a failed start: the camera may be half way into
 	// webcam mode.
@@ -223,7 +251,13 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		Width:       s.width,
 		Height:      s.height,
 		ReadTimeout: 5 * time.Second,
-	}, os.Stderr, 3*time.Second, s.feed.Live)
+		FirstFrame:  firstFrame,
+	}, os.Stderr, 3*time.Second, func(frame []byte) error {
+		if ctx.Err() != nil {
+			return nil // ending: leave the device to the placeholder
+		}
+		return s.feed.Live(frame)
+	})
 	return ended(ctx, err)
 }
 

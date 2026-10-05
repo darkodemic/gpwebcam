@@ -89,6 +89,8 @@ type StartOptions struct {
 	// Streaming bounds the wait for the camera to report a running stream
 	// after Start.
 	Streaming time.Duration
+	// OnStatus, if set, gets the webcam status read before Start.
+	OnStatus func(WebcamStatus)
 }
 
 // StartWebcam follows the spec's webcam state machine: wired USB control
@@ -105,6 +107,9 @@ func (c *Client) StartWebcam(ctx context.Context, o StartOptions) error {
 	st, err := c.Status(ctx)
 	if err != nil {
 		return err
+	}
+	if o.OnStatus != nil {
+		o.OnStatus(st.Status)
 	}
 	if st.Status.Streaming() {
 		// Left over from an earlier run that did not stop it.

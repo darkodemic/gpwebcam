@@ -1,6 +1,6 @@
 # Drugi presek: `gw run` i user servis
 
-- **Status:** U izradi. Kod napisan 2026-10-05 i `go test ./...` prolazi. Na kameri je `gw run` pokrenuo stream; zamenska slika, Zoom posle `gw run` i servis pod systemd-om još nisu isprobani. Otvoreno je i kašnjenje od oko 0.8 s na putu kroz `gw` (§4).
+- **Status:** U izradi. Na kameri provereno 2026-10-05: kašnjenje u Zoom-u 0.18 s (bilo 1.1 s, §4), Zoom vidi uređaj i zamensku sliku bez restarta, izvlačenje i vraćanje kabla rade uz watchdog (§3.1). Servis pod systemd-om i README još nisu urađeni.
 - **Date:** 2026-10-05
 - **Owner:** Darko
 - **Related:** ADR 0003 (gw drži loopback uređaj i radi kao user servis); `first-slice-gw-start.md` §7.2 (Zoom i kašnjenje), §8; ADR 0002 (Open GoPro HTTP API za upravljanje kamerom)
@@ -42,17 +42,45 @@ Ručno, sa kamerom:
 3. Izvući kabl: za oko 0.5 s vraća se "Camera not connected".
 4. Servis: `systemd-run --user` sa istim podešavanjima kao `gw.service`, da se provere ograničenja (`ProtectSystem=strict`, `PrivateTmp` i ostala), pa instalacija i `systemctl --user enable --now gw.service`.
 
-Prvi rezultati, 2026-10-05: `gw run` je otvorio uređaj (odmah "Video Capture"), našao kameru i pokrenuo stream za 2.4 s; kašnjenje kroz novi put je isto kao kroz stari (`first-slice-gw-start.md` §7.2).
+### 3.1 Rezultati na kameri, 2026-10-05
+
+| Test | Rezultat |
+|---|---|
+| `gw run` bez kamere | odmah "Video Capture"; zamenska slika "Camera not connected" |
+| priključivanje | "Connecting to camera", pa stream za oko 2.5 s |
+| Zoom pokrenut posle `gw run` | vidi kameru GoPro; kašnjenje 0.18 s (§4) |
+| restart `gw`-a dok Zoom radi | Zoom zadrži uređaj, slika se vrati za oko 3 s |
+| izvlačenje kabla dok Zoom radi | zamenska slika u Zoom-u za najviše 1.6 s (snimak ekrana na oko 1.2 s) |
+| vraćanje kabla | dva puta od dva: kamera prijavi status 2 posle START-a, a video ne stigne. Prvi put (bez watchdog-a) ffmpeg je odustao posle 18 s, a novi pokušaj 5 s kasnije je uspeo. Drugi put (watchdog od 6 s) "No video from camera, retrying" posle 7 s, novi pokušaj 2 s kasnije uspe; video oko 15 s posle vraćanja kabla |
+| jedna greška dekodiranja | oko jednom u 5 minuta ("corrupt decoded frame"); slika se sama oporavi |
+
+Usput uočeno:
+
+- Posle priključivanja kernel prvo nazove interfejs `eth0`, a udev ga posle oko 0.5 s preimenuje u `enp0s20f0u1`. `gw` ponekad uhvati `eth0`, sesija se prekine kao "unplugged" i odmah krene sa novim imenom. Radi, ali log izgleda kao lažno izvlačenje.
+- Status kamere pre START-a posle vraćanja kabla bio je oba puta "idle", a posle neuspelog pokušaja "off". Prvo priključivanje tog dana takođe je dalo "idle", ali START je tada uspeo. GoPro FAQ za "idle" posle novog USB povezivanja predlaže start pa stop; to bi moglo da skrati oporavak, ali nije provereno.
+- ffplay ne može da otvori `/dev/video42` dok ga `mpv` čita ("Device or resource busy"). Treba proveriti da li Zoom i browser mogu istovremeno.
 
 ## 4. Kašnjenje
 
-Kamera direktno u ffplay daje 0.25 s, a put kroz `gw` i `/dev/video42` oko 1.1 s (`first-slice-gw-start.md` §7.2). Razlika od oko 0.8 s nastaje u `gw`-ovom ffmpeg-u, u v4l2loopback-u ili u čitaču uređaja. Redosled provere:
+Rešeno 2026-10-05. Kamera direktno u ffplay daje 0.15 do 0.25 s, a put kroz `gw` i `/dev/video42` je davao oko 1.1 s (`first-slice-gw-start.md` §7.2). Merenja istim načinom (GoPro usmeren u sat sa milisekundama, snimak ekrana):
 
-1. Drugi čitač: `mpv av://v4l2:/dev/video42 --profile=low-latency --untimed`. Ako pokaže oko 0.3 s, kriv je ffplay-ev v4l2 ulaz, a Zoom treba meriti posebno.
-2. Vreme od dolaska UDP paketa do upisa frejma u `gw`-ovom ffmpeg-u na pravom streamu (`-debug_ts` i `showinfo` uz `-loglevel +datetime`).
-3. Razlike između `gw`-ovog ffmpeg-a i ffplay-a koji je dao 0.25 s: `timeout` na UDP ulazu, `-vf scale`, izlazni režim frejm-rate-a (`-fps_mode`).
+| Šta | Rezultat |
+|---|---|
+| `mpv --profile=low-latency --untimed` kao čitač umesto ffplay-a | 1.15 s: čitač nije kriv |
+| u `gw`-ovom ffmpeg-u, od paketa do frejma posle filtera (`-debug_ts`, `showinfo`, `-loglevel +datetime`) | medijana 5 ms, najviše 15 ms; paketi se čitaju u realnom vremenu |
+| v4l2loopback: ffmpeg piše test-sliku, drugi ffmpeg čita, frejmovi upareni po checksum-u | 35 do 40 ms |
+| port otvoren 2 s posle START-a, umesto odmah | 0.15 do 0.18 s: redosled ne utiče |
+| ffmpeg kao `gw` u `/dev/video42`, bez izmena | 1.02 s |
+| isto, bez `timeout` na UDP-u | 1.18 s |
+| isto, bez `scale` | 1.13 s |
+| **isto, sa `-fps_mode passthrough`** | **0.18 s** |
+| `gw run` sa `-fps_mode passthrough`, čitač `mpv` | 0.18 do 0.20 s |
+| isto, Zoom (self view u sastanku) | 0.18 s, ugnežđeni snimak 0.20 s |
+
+Uzrok: ffmpeg za izlaz u `rawvideo` i `v4l2` podrazumevano koristi konstantan frame rate (CFR), i sa kamerinim streamom to drži frejmove oko 0.85 s. `gw` sada daje `-fps_mode passthrough`, pa svaki dekodirani frejm odmah ide dalje. Lokalni test-stream iz §5.1 prvog preseka ovo nije pokazao, jer je merio izlaz `-f null` sa savršenim vremenskim oznakama.
 
 ## 5. Gde smo i šta sledi
 
 - 2026-10-05: napisani `feed`, `placeholder`, `v4l2.OpenOutput`, `gw run` i `gw.service`; testovi prolaze. Izmerena kašnjenja po podešavanjima i bez `gw`-a.
-- Sledeće: uzrok kašnjenja (§4), pa ručni testovi iz §3, pa README za `gw run` i servis.
+- 2026-10-05: kašnjenje rešeno sa `-fps_mode passthrough` (§4). Dodat watchdog: ako 6 s posle START-a ne stigne frejm, sesija se prekida i ponavlja posle 2 s. Zamenska slika se prikaže čim interfejs nestane, ne čeka ffmpeg. Status kamere pre START-a se upisuje u log. Ručni testovi sa Zoom-om prošli (§3.1).
+- Sledeće: servis pod systemd-om (§3, korak 4); README za `gw run` i servis; po želji start pa stop kad je kamera "idle" posle priključivanja, i stabilno ime interfejsa pre sesije (§3.1).
