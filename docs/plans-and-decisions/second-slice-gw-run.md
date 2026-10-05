@@ -10,7 +10,7 @@
 - `gw` drži `/dev/videoN` otvorenim i sam piše frejmove; ffmpeg šalje dekodirane frejmove kroz pipe (ADR 0003).
 - Zamenska slika dok kamere nema, sa stanjem u drugom redu.
 - `gw run`: stalno radi, čeka kameru, pokreće sesiju, posle izvlačenja kabla vraća zamensku sliku za oko 0.5 s, posle neuspele sesije sa priključenom kamerom čeka 5 s pa pokušava ponovo.
-- `contrib/systemd/gw.service`: systemd user servis za `gw run`.
+- `contrib/systemd/gw.service` (od ADR 0005 `packaging/systemd/gpwebcam.service`): systemd user servis za `gw run`.
 - Uzrok kašnjenja od oko 0.8 s na putu kroz `gw` (§4).
 
 Van obima: notifikacije, snimanje, više kamera, instalacija `modprobe.d` konfiguracije.

@@ -1,0 +1,32 @@
+# systemd user unit for gpwebcam, installed to /usr/lib/systemd/user/.
+# Packages do not enable it. Each user who wants the GoPro webcam runs:
+#   systemctl --user enable --now gpwebcam.service
+#
+# gpwebcam runs as that user: the uaccess ACL lets it write to the
+# v4l2loopback device, and it needs no root. It keeps the device fed with
+# a placeholder picture and switches to the camera whenever one is plugged in.
+
+[Unit]
+Description=gpwebcam: GoPro as a webcam through v4l2loopback
+Documentation=https://github.com/darkodemic/gpwebcam
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/gpwebcam run
+Restart=on-failure
+RestartSec=10s
+
+# gpwebcam needs the loopback device, IPv4 to the camera and netlink to
+# read interfaces; nothing else.
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=default.target

@@ -1,6 +1,6 @@
 # GoPro webcam na Linuxu: nalazi iz review-a forka i predaja
 
-- **Status:** Radna beleška, ažurirana 2026-10-05. Piše se od nule, u Go-u (ADR 0001), a kamerom se upravlja preko Open GoPro API-ja (ADR 0002). Prvi presek `gw start` radi na kameri: 1080p30 na `/dev/video42` (§9).
+- **Status:** Radna beleška, ažurirana 2026-10-05. Od 2026-10-05 program se zove `gpwebcam` (ADR 0005); ova beleška i stariji dokumenti ga zovu `gw`. Piše se od nule, u Go-u (ADR 0001), a kamerom se upravlja preko Open GoPro API-ja (ADR 0002). Prvi presek `gw start` radi na kameri: 1080p30 na `/dev/video42` (§9).
 - **Date:** 2026-09-29
 - **Owner:** Darko
 - **Related:** ADR 0001 (Go kao jezik implementacije); ADR 0002 (Open GoPro HTTP API za upravljanje kamerom); `first-slice-gw-start.md`; `open-gopro-webcam-api.md`; `upstream-issues-review.md`; fork `darkodemic/gopro_as_webcam_on_linux` (lokalno `~/Projects/gopro_as_webcam_on_linux`, do 2026-09-29 `gopro-tux`); upstream `jschmid1/gopro_as_webcam_on_linux`
@@ -161,9 +161,11 @@ Provereno 2026-10-05: radi kernel `7.2.8-arch1-2`, isti kao `linux`, `linux-head
 - 2026-10-05: Zoom ne vidi kameru ako je pokrenut pre `gw`-a; rešenje je `gw` kao jedini pisac u uređaj sa zamenskom slikom i `gw run` kao user servis (ADR 0003, `second-slice-gw-run.md`). Merenje kašnjenja: kamera direktno 0.25 s, kroz `gw` oko 1.1 s (`first-slice-gw-start.md` §7.2).
 - 2026-10-05: kašnjenje kroz `gw` spušteno sa 1.1 s na 0.18 s (`-fps_mode passthrough`); watchdog za kameru koja posle START-a ne šalje video; Zoom prolazi izvlačenje i vraćanje kabla bez restarta (`second-slice-gw-run.md` §3.1, §4).
 
+- 2026-10-05: licenca Apache-2.0 (ADR 0004); ime `gpwebcam`, paketi kroz GoReleaser i podešavanje modula kroz `/usr/lib/modprobe.d` (ADR 0005, `packaging-and-release.md`).
+
 Sledeće:
 
-1. Servis pod systemd-om i README za `gw run` (`second-slice-gw-run.md` §5). Kašnjenje je rešeno 2026-10-05: 0.18 s u Zoom-u (`-fps_mode passthrough`, `second-slice-gw-run.md` §4).
+1. Instalacija lokalno napravljenog paketa i test servisa (`packaging-and-release.md` §7). Servis pod systemd-om i README za `gw run` (`second-slice-gw-run.md` §5). Kašnjenje je rešeno 2026-10-05: 0.18 s u Zoom-u (`-fps_mode passthrough`, `second-slice-gw-run.md` §4).
 2. Ostatak iz `first-slice-gw-start.md` §8: watchdog za pakete, provera rute, instalacija.
 
 ## 10. Ideje za kasnije

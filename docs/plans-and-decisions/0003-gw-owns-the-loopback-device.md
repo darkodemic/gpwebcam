@@ -23,7 +23,7 @@ Prvobitni plan (predajna beleška §5) bio je udev pravilo koje pri priključenj
 2. ffmpeg više ne piše u uređaj. Dekodira stream, skalira ga na veličinu uređaja i šalje sirove `yuv420p` frejmove `gw`-u kroz pipe (`-f rawvideo -flush_packets 1 pipe:1`).
 3. Dok kamera ne šalje video, `gw` ponavlja zamensku sliku 10 puta u sekundi: "gw - GoPro webcam for Linux" i ispod stanje ("Camera not connected", "Connecting to camera", "No video from camera, retrying"). Sliku jednom iscrta ffmpeg (`drawtext`), a ako to ne uspe, koristi se jednobojna tamna slika.
 4. Nova komanda `gw run` radi stalno: na svakih 0.5 s traži GoPro interfejs u sysfs-u, pokreće sesiju kad ga nađe, a kad interfejs nestane, za oko 0.5 s vraća zamensku sliku. `gw start` ostaje za jednu sesiju.
-5. `gw run` radi kao systemd **user** servis (`contrib/systemd/gw.service`), pod korisnikom koji je prijavljen. Pristup uređaju daje uaccess ACL, root ne treba, a udev pravilo nije potrebno, jer servis sam čeka kameru.
+5. `gw run` radi kao systemd **user** servis (`contrib/systemd/gw.service`, od ADR 0005 `packaging/systemd/gpwebcam.service`), pod korisnikom koji je prijavljen. Pristup uređaju daje uaccess ACL, root ne treba, a udev pravilo nije potrebno, jer servis sam čeka kameru.
 
 ## Consequences
 

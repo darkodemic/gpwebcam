@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// maxBody bounds how much of a response gw reads; replies are small JSON.
+// maxBody bounds how much of a response gpwebcam reads; replies are small JSON.
 const maxBody = 64 << 10
 
 // Client sends requests to one camera. It uses its own transport: no proxy

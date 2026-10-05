@@ -111,6 +111,18 @@ func (c *Client) StartWebcam(ctx context.Context, o StartOptions) error {
 	if o.OnStatus != nil {
 		o.OnStatus(st.Status)
 	}
+	if st.Status == StatusIdle {
+		// Open GoPro FAQ: after a new USB connection the camera reports
+		// idle instead of off, and GoPro's workaround is a start followed
+		// at once by a stop. Without it, the first start after a replug
+		// twice reported streaming but sent nothing (2026-10-05).
+		if err := c.Start(ctx, o.Res, o.FOV, o.Port); err != nil {
+			return fmt.Errorf("start-stop workaround for an idle camera: %w", err)
+		}
+		if err := c.Stop(ctx); err != nil {
+			return fmt.Errorf("start-stop workaround for an idle camera: %w", err)
+		}
+	}
 	if st.Status.Streaming() {
 		// Left over from an earlier run that did not stop it.
 		if err := c.Stop(ctx); err != nil {

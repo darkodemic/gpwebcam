@@ -1,4 +1,4 @@
-// Package placeholder renders the still frame gw shows while no camera
+// Package placeholder renders the still frame gpwebcam shows while no camera
 // video is available, so the loopback device keeps offering a picture.
 package placeholder
 
@@ -11,7 +11,7 @@ import (
 )
 
 // Title is the first line of every placeholder.
-const Title = "gw - GoPro webcam for Linux"
+const Title = "gpwebcam - GoPro webcam for Linux"
 
 // Status lines shown under the title.
 const (

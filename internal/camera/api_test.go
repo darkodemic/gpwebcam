@@ -103,6 +103,21 @@ func TestStartWebcam(t *testing.T) {
 	}
 }
 
+func TestStartWebcamIdleWorkaround(t *testing.T) {
+	cam := &fakeCamera{status: StatusIdle}
+	c := newTestClient(t, cam)
+	if err := c.StartWebcam(context.Background(), testOptions()); err != nil {
+		t.Fatal(err)
+	}
+	start := "/gopro/webcam/start?res=12&fov=4&port=8554&protocol=TS"
+	got := strings.Join(cam.log(), " ")
+	want := "/gopro/camera/control/wired_usb?p=0 /gopro/webcam/status " +
+		start + " " + pathStop + " " + start + " /gopro/webcam/status"
+	if got != want {
+		t.Errorf("requests:\n got %s\nwant %s", got, want)
+	}
+}
+
 func TestStartWebcamStopsLeftover(t *testing.T) {
 	cam := &fakeCamera{status: StatusHighPowerPreview}
 	c := newTestClient(t, cam)

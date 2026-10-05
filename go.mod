@@ -1,3 +1,3 @@
-module github.com/darkodemic/gw
+module github.com/darkodemic/gpwebcam
 
-go 1.26.8
+go 1.22

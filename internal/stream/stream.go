@@ -1,5 +1,5 @@
 // Package stream runs ffmpeg, which receives the camera's MPEG-TS stream over
-// UDP, decodes it and hands gw raw frames through a pipe.
+// UDP, decodes it and hands gpwebcam raw frames through a pipe.
 package stream
 
 import (
@@ -26,7 +26,7 @@ var ErrNoVideo = errors.New("the camera reports streaming, but no video arrived;
 type Config struct {
 	FFmpeg string         // ffmpeg executable, looked up in PATH if it has no slash
 	Listen netip.AddrPort // host address on the GoPro link; never unspecified
-	// Width and Height are the size of the frames gw gets; ffmpeg scales
+	// Width and Height are the size of the frames gpwebcam gets; ffmpeg scales
 	// to them, so they always match the loopback device's format.
 	Width, Height int
 	// ReadTimeout makes ffmpeg exit when no packet arrives for this long,
@@ -123,7 +123,7 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	cmd.Stderr = logs
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = grace
-	// Die with gw even if gw is killed without a chance to clean up.
+	// Die with gpwebcam even if gpwebcam is killed without a chance to clean up.
 	// Pdeathsig fires when the forking OS thread exits, so keep this
 	// goroutine on that thread until ffmpeg is gone.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}

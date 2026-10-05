@@ -1,4 +1,4 @@
-// Command gw makes a GoPro connected over USB usable as a Linux webcam
+// Command gpwebcam makes a GoPro connected over USB usable as a Linux webcam
 // through a v4l2loopback device.
 package main
 
@@ -13,15 +13,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkodemic/gw/internal/camera"
-	"github.com/darkodemic/gw/internal/stream"
-	"github.com/darkodemic/gw/internal/usbnet"
+	"github.com/darkodemic/gpwebcam/internal/camera"
+	"github.com/darkodemic/gpwebcam/internal/stream"
+	"github.com/darkodemic/gpwebcam/internal/usbnet"
+	"github.com/darkodemic/gpwebcam/internal/v4l2"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
-const usage = `usage: gw <command> [flags]
+const usage = `usage: gpwebcam <command> [flags]
 
 commands:
   run       keep the loopback device fed: camera video whenever a GoPro
@@ -30,14 +31,14 @@ commands:
   list      list GoPro network interfaces
   version   print the version
 
-Run "gw <command> -h" for the flags of a command.
+Run "gpwebcam <command> -h" for the flags of a command.
 `
 
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	if err := run(os.Args[1:], os.Stdout, log); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
-			fmt.Fprintln(os.Stderr, "gw:", err)
+			fmt.Fprintln(os.Stderr, "gpwebcam:", err)
 		}
 		os.Exit(1)
 	}
@@ -56,7 +57,7 @@ func run(args []string, stdout io.Writer, log *slog.Logger) error {
 	case "list":
 		return cmdList(args[1:], stdout)
 	case "version":
-		fmt.Fprintln(stdout, "gw", version)
+		fmt.Fprintln(stdout, "gpwebcam", version)
 		return nil
 	case "-h", "-help", "--help", "help":
 		fmt.Fprint(stdout, usage)
@@ -92,6 +93,7 @@ type startFlags struct {
 	fov         camera.FOV
 	port        uint16
 	videoNr     int
+	label       string
 	ffmpeg      string
 	dhcpWait    time.Duration
 	connectWait time.Duration
@@ -109,7 +111,8 @@ func parseStart(name string, args []string) (startFlags, error) {
 		f.port = p
 		return err
 	})
-	fs.IntVar(&f.videoNr, "video-nr", 42, "v4l2loopback device number, /dev/videoN")
+	fs.IntVar(&f.videoNr, "video-nr", -1, "v4l2loopback device number, /dev/videoN; -1 finds the device by -device-label")
+	fs.StringVar(&f.label, "device-label", v4l2.DefaultLabel, "card_label of the v4l2loopback device to use")
 	fs.StringVar(&f.ffmpeg, "ffmpeg", "ffmpeg", "ffmpeg executable")
 	fs.DurationVar(&f.dhcpWait, "dhcp-wait", 30*time.Second, "how long to wait for an IPv4 address on the interface")
 	fs.DurationVar(&f.connectWait, "connect-wait", 20*time.Second, "how long to wait for the camera's HTTP server to answer")
@@ -124,6 +127,13 @@ func parseStart(name string, args []string) (startFlags, error) {
 		if err := usbnet.ValidateName(f.iface); err != nil {
 			return f, err
 		}
+	}
+	if f.videoNr < -1 || f.videoNr > v4l2.MaxDeviceNumber {
+		return f, fmt.Errorf("-video-nr %d: must be -1 (find by label) or 0 to %d", f.videoNr, v4l2.MaxDeviceNumber)
+	}
+	// card_label is at most 31 bytes in v4l2loopback.
+	if f.label == "" || len(f.label) > 31 {
+		return f, fmt.Errorf("-device-label %q: must be 1 to 31 bytes", f.label)
 	}
 	if f.dhcpWait <= 0 || f.connectWait <= 0 || f.httpTimeout <= 0 {
 		return f, fmt.Errorf("-dhcp-wait, -connect-wait and -http-timeout must be positive")

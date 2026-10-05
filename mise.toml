@@ -1,0 +1,2 @@
+[tools]
+goreleaser = "2.18.2"

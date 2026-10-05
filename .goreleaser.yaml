@@ -1,0 +1,126 @@
+# GoReleaser configuration for gpwebcam.
+# Local test build of every package, without publishing anything:
+#   goreleaser release --snapshot --clean
+# Package layout and dependencies follow
+# docs/plans-and-decisions/packaging-and-release.md.
+version: 2
+project_name: gpwebcam
+
+builds:
+  - id: gpwebcam
+    main: ./cmd/gpwebcam
+    binary: gpwebcam
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # Reproducible: file times come from the commit, not the build machine.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: gpwebcam
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - packaging/systemd/gpwebcam.service
+      - packaging/modules-load.d/gpwebcam.conf
+      - packaging/modprobe.d/99-gpwebcam.conf
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  # deb and rpm get a synopsis line and a long description; Arch wants a
+  # one-line pkgdesc, so it has its own entry below that reuses this one.
+  - &nfpm
+    id: gpwebcam
+    package_name: gpwebcam
+    file_name_template: "{{ .ConventionalFileName }}"
+    vendor: Darko Demić
+    homepage: https://github.com/darkodemic/gpwebcam
+    maintainer: Darko Demić <mail@darkodemic.com>
+    description: |-
+      Use a GoPro connected over USB as a Linux webcam
+      gpwebcam starts the camera's webcam mode through the Open GoPro HTTP API
+      and feeds its video into a v4l2loopback device that browsers, Zoom and
+      other video applications use like any other camera. It runs as a
+      systemd user service without root.
+    license: Apache-2.0
+    section: video
+    priority: optional
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    dependencies:
+      - ffmpeg
+    contents:
+      - src: packaging/systemd/gpwebcam.service
+        dst: /usr/lib/systemd/user/gpwebcam.service
+        file_info:
+          mode: 0644
+      - src: packaging/modules-load.d/gpwebcam.conf
+        dst: /usr/lib/modules-load.d/gpwebcam.conf
+        file_info:
+          mode: 0644
+      - src: packaging/modprobe.d/99-gpwebcam.conf
+        dst: /usr/lib/modprobe.d/99-gpwebcam.conf
+        file_info:
+          mode: 0644
+      - src: README.md
+        dst: /usr/share/doc/gpwebcam/README.md
+        file_info:
+          mode: 0644
+      # Arch and Fedora keep license texts here; Debian uses a DEP-5
+      # copyright file that points to /usr/share/common-licenses.
+      - src: LICENSE
+        dst: /usr/share/licenses/gpwebcam/LICENSE
+        packager: archlinux
+        file_info:
+          mode: 0644
+      - src: LICENSE
+        dst: /usr/share/licenses/gpwebcam/LICENSE
+        packager: rpm
+        type: license
+        file_info:
+          mode: 0644
+      - src: packaging/deb/copyright
+        dst: /usr/share/doc/gpwebcam/copyright
+        packager: deb
+        file_info:
+          mode: 0644
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+    overrides:
+      deb:
+        recommends:
+          - v4l2loopback-dkms | v4l2loopback-modules
+        suggests:
+          - v4l2loopback-utils
+      rpm:
+        # Fedora's ffmpeg-free does not provide the name "ffmpeg".
+        dependencies:
+          - /usr/bin/ffmpeg
+        recommends:
+          - v4l2loopback
+    rpm:
+      summary: Use a GoPro connected over USB as a Linux webcam
+    archlinux:
+      packager: Darko Demić <mail@darkodemic.com>
+  - <<: *nfpm
+    id: gpwebcam-arch
+    formats: [archlinux]
+    description: Use a GoPro connected over USB as a Linux webcam
+
+changelog:
+  use: git
+  sort: asc
+
+release:
+  github:
+    owner: darkodemic
+    name: gpwebcam
+  draft: true

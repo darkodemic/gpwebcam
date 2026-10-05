@@ -1,6 +1,9 @@
 package v4l2
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"unsafe"
 )
@@ -35,5 +38,34 @@ func TestFormatLayout(t *testing.T) {
 	}
 	if pixFmtYU12 != 0x32315559 {
 		t.Errorf("V4L2_PIX_FMT_YUV420 = %#x, want 0x32315559", pixFmtYU12)
+	}
+}
+
+func TestFindByLabel(t *testing.T) {
+	root := t.TempDir()
+	dev := func(name, label string) {
+		d := filepath.Join(root, "class", "video4linux", name)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "name"), []byte(label+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dev("video0", "UVC Camera (1234:5678)")
+	dev("video1", "UVC Camera (1234:5678)")
+	dev("video2", "OBS Virtual Camera")
+	dev("video42", "GoPro")
+	dev("v4l-subdev0", "GoPro") // not a videoN node
+
+	if p, err := FindByLabel(root, "GoPro"); err != nil || p != "/dev/video42" {
+		t.Errorf("FindByLabel(GoPro) = %q, %v", p, err)
+	}
+	if _, err := FindByLabel(root, "Nope"); err == nil {
+		t.Error("missing label found")
+	}
+	dev("video43", "GoPro")
+	if _, err := FindByLabel(root, "GoPro"); err == nil || !strings.Contains(err.Error(), "several") {
+		t.Errorf("duplicate label: %v", err)
 	}
 }

@@ -13,18 +13,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/darkodemic/gw/internal/camera"
-	"github.com/darkodemic/gw/internal/feed"
-	"github.com/darkodemic/gw/internal/placeholder"
-	"github.com/darkodemic/gw/internal/stream"
-	"github.com/darkodemic/gw/internal/usbnet"
-	"github.com/darkodemic/gw/internal/v4l2"
+	"github.com/darkodemic/gpwebcam/internal/camera"
+	"github.com/darkodemic/gpwebcam/internal/feed"
+	"github.com/darkodemic/gpwebcam/internal/placeholder"
+	"github.com/darkodemic/gpwebcam/internal/stream"
+	"github.com/darkodemic/gpwebcam/internal/usbnet"
+	"github.com/darkodemic/gpwebcam/internal/v4l2"
 )
 
 const (
 	// idleInterval is how often the placeholder frame is repeated.
 	idleInterval = 100 * time.Millisecond
-	// pollInterval is how often gw looks for a camera, and checks that the
+	// pollInterval is how often gpwebcam looks for a camera, and checks that the
 	// interface of a running session still exists.
 	pollInterval = 500 * time.Millisecond
 	// retryDelay is the pause before a new session when the last one failed
@@ -64,7 +64,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	if err != nil {
 		return err
 	}
-	device, err := v4l2.DevicePath(f.videoNr)
+	device, err := findDevice(f)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	// After the first signal, a second one kills gw at once, in case
+	// After the first signal, a second one kills gpwebcam at once, in case
 	// stopping the camera hangs; ffmpeg dies with it through Pdeathsig.
 	go func() {
 		<-ctx.Done()
@@ -126,6 +126,15 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		s.show(ctx, placeholder.NotConnected)
 	}
+}
+
+// findDevice returns /dev/videoN from -video-nr, or else the device whose
+// card label is -device-label.
+func findDevice(f startFlags) (string, error) {
+	if f.videoNr >= 0 {
+		return v4l2.DevicePath(f.videoNr)
+	}
+	return v4l2.FindByLabel("/sys", f.label)
 }
 
 // waitForCamera polls for a GoPro interface until one appears. It returns
