@@ -4,9 +4,10 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 ## Tools
 
-- **Go.** `go.mod` requires Go 1.22, so Debian stable can build the package; any newer Go works too. Only the standard library is used.
+- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Only the standard library is used.
 - **ffmpeg**, for the tests that run the real ffmpeg and for running gpwebcam.
-- **GoReleaser**, for building packages. It is pinned in `mise.toml`; with [mise](https://mise.jdx.dev), `mise install` in the repository installs it.
+- **GoReleaser**, for building packages, also pinned in `mise.toml`.
+- With [mise](https://mise.jdx.dev), `mise install` in the repository installs both. If your shell does not activate mise, prefix commands with `mise exec --`, e.g. `mise exec -- go test ./...`. CI uses the same `mise.toml`.
 - For trying it with a camera: the v4l2loopback module and a GoPro; see the README.
 
 ## Layout
@@ -73,8 +74,8 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 
 ## CI and releases
 
-- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the newest Go, then a snapshot build of all packages, kept as a workflow artifact.
-- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser builds the packages and creates a **draft** GitHub release with them, the archives and `checksums.txt`. A maintainer checks the draft and publishes it.
+- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as a workflow artifact.
+- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages and creates a **draft** GitHub release with them, the archives and `checksums.txt`. A maintainer checks the draft and publishes it.
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 

@@ -1,2 +1,6 @@
+# Tool versions for building gpwebcam, used locally and in CI
+# (jdx/mise-action). go.mod states the oldest Go the code supports;
+# this is the Go that release builds use.
 [tools]
+go = "1.27.1"
 goreleaser = "2.18.2"

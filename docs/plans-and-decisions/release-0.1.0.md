@@ -73,4 +73,6 @@
   - `doctor`: jasna poruka kad user systemd nije dostupan (sudo, kontejner) i kad `modprobe` ne postoji.
   - Snapshot verzija je sada `0.0.1~dev.<commit>`, pa se u svakom menadžeru paketa sortira pre sledećeg izdanja.
   - Poruka posle instalacije: reboot ili ponovno učitavanje samo ako je modul bio učitan pre instalacije (na Arch-u ga systemd hook učita pri instalaciji); dodat korak `gpwebcam doctor`.
-- Sledeće: restart kad Darku odgovara (servis pri prijavi, modul pri boot-u); zelen CI posle oporavka GitHub Actions; tag `v0.1.0`.
+- 2026-10-05: commit `3b1cc56` push-ovan; CI zelen na sva tri posla posle oporavka GitHub Actions (23:35).
+- 2026-10-05: Darko pitao zašto Go nije u `mise.toml`. Bio je propust: globalni `go latest` je davao 1.26.8, a najnoviji je 1.27.1. Sada `mise.toml` zakucava Go 1.27.1 uz GoReleaser 2.18.2; `go.mod` ostaje `go 1.22` kao minimum. Sa go1.27.1 (kroz `mise exec`, jer shell sesije ima Go u PATH-u mimo `mise.toml`) `vet`, `go test -race` i build paketa prolaze, binarni fajl nosi go1.27.1. CI test i paketi i release workflow sada instaliraju alate iz `mise.toml` (`jdx/mise-action` v5.1.1, zakucan na commit); test na Go 1.22 ostaje preko `setup-go`.
+- Sledeće: restart kad Darku odgovara (servis pri prijavi, modul pri boot-u); tag `v0.1.0`.

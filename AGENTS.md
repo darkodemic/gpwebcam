@@ -16,7 +16,7 @@ When work changes what a plan says, update that plan in the same session.
 
 ## Rules
 
-- Go, a single binary, standard library first. The toolchain comes from mise (global `go latest`); `go.mod` stays at `go 1.22` so Debian can build it. GoReleaser is pinned in `mise.toml`.
+- Go, a single binary, standard library first. `mise.toml` pins Go and GoReleaser for local builds and CI (`jdx/mise-action`); run tools with `mise exec --` when the shell does not activate mise. `go.mod` stays at `go 1.22`, the oldest supported Go, so Debian can build it.
 - No root at runtime. Root is needed only to install the package, which ships the module config in `/usr/lib/modules-load.d/` and `/usr/lib/modprobe.d/`. Never unload or reload v4l2loopback, because other devices (OBS) may use it.
 - Packages put files only under `/usr` (see ADR 0005), never in `/etc` or `$HOME`, and never enable or start the user service themselves.
 - Never run anything through a shell. Start ffmpeg with `os/exec` and an argument list.
