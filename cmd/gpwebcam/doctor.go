@@ -198,8 +198,10 @@ func checkLoopback(r *report, f doctorFlags) {
 		fmt.Fprintf(r.w, "        %s %q\n", d.path, d.name)
 	}
 
-	opts := moduleOptions()
+	opts, optsErr := moduleOptions()
 	switch {
+	case optsErr != nil:
+		r.warn(fmt.Sprintf("cannot read the module configuration: %v", optsErr))
 	case len(opts) == 0:
 		r.warn("no v4l2loopback options are configured",
 			"The gpwebcam package installs /usr/lib/modprobe.d/99-gpwebcam.conf; reinstall it, or create a file like it.")
@@ -255,12 +257,15 @@ func loopbackDevices(sysfs string) []loopDev {
 
 // moduleOptions returns the v4l2loopback lines of the effective modprobe
 // configuration.
-func moduleOptions() []string {
+func moduleOptions() ([]string, error) {
+	if _, err := exec.LookPath("modprobe"); err != nil {
+		return nil, errors.New("modprobe is not installed")
+	}
 	out, err := output("modprobe", "-c")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("modprobe -c: %w", err)
 	}
-	return optionLines(out)
+	return optionLines(out), nil
 }
 
 func optionLines(modprobeC string) []string {
@@ -277,6 +282,13 @@ func checkService(r *report) {
 	r.section("service")
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		r.warn("systemctl not found; start gpwebcam run yourself")
+		return
+	}
+	// is-system-running prints a state even when the manager is degraded;
+	// nothing at all means this process cannot reach the user's systemd.
+	if state, _ := output("systemctl", "--user", "is-system-running"); strings.TrimSpace(state) == "" {
+		r.warn("cannot reach this user's systemd",
+			"Run gpwebcam doctor as yourself in your desktop session, not with sudo or in a container.")
 		return
 	}
 	enabled, _ := output("systemctl", "--user", "is-enabled", "gpwebcam.service")

@@ -1,0 +1,11 @@
+# Package changelog in chglog format; nFPM turns it into the Debian
+# changelog and the RPM %changelog. Add an entry for every release, with
+# semver set to the version and package release (version-1).
+- semver: 0.1.0-1
+  date: 2026-10-05T00:00:00Z
+  packager: Darko Demić <mail@darkodemic.com>
+  deb:
+    urgency: medium
+    distributions: [unstable]
+  changes:
+    - note: Initial release.

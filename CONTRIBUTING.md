@@ -64,6 +64,8 @@ ar p dist/gpwebcam_*_amd64.deb control.tar.gz | tar -xzO ./control      # Debian
 bsdtar -tvf dist/gpwebcam-*.x86_64.rpm                                  # RPM
 ```
 
+The linters are clean apart from known, accepted findings: lintian `initial-upload-closes-no-bugs` (only for uploads to the Debian archive), rpmlint `statically-linked-binary` and namcap's RELRO and PIE warnings (the binary is static on purpose), and namcap's "owned by 0:0" (nFPM leaves owner names empty; pacman installs as root). Snapshot builds also get rpmlint `incoherent-version-in-changelog`, because the changelog names the next release.
+
 The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decisions/packaging-and-release.md`):
 
 - Files go only under `/usr`: `/usr/bin`, `/usr/lib/systemd/user`, `/usr/lib/modules-load.d`, `/usr/lib/modprobe.d`, `/usr/share/doc`, `/usr/share/licenses`. Nothing goes into `/etc` or a home directory.
@@ -76,7 +78,7 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 
-To release: make sure `main` is green, then tag and push:
+To release: add an entry for the version to `packaging/changelog.yml` (it becomes the Debian changelog and the RPM `%changelog`), make sure `main` is green, then tag and push:
 
 ```sh
 git tag -a v0.1.0 -m "gpwebcam 0.1.0"

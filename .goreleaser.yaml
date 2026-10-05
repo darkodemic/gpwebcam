@@ -41,6 +41,11 @@ archives:
 checksum:
   name_template: checksums.txt
 
+snapshot:
+  # A test build sorts before the next release in every package manager
+  # (deb and rpm treat "~" as earlier).
+  version_template: "{{ incpatch .Version }}~dev.{{ .ShortCommit }}"
+
 nfpms:
   # deb and rpm get a synopsis line and a long description; Arch wants a
   # one-line pkgdesc, so it has its own entry below that reuses this one.
@@ -48,6 +53,10 @@ nfpms:
     id: gpwebcam
     package_name: gpwebcam
     file_name_template: "{{ .ConventionalFileName }}"
+    release: "1"
+    # File times from the commit, so pacman -Qkk and rebuilds agree.
+    mtime: "{{ .CommitDate }}"
+    changelog: packaging/changelog.yml
     vendor: Darko Demić
     homepage: https://github.com/darkodemic/gpwebcam
     maintainer: Darko Demić <mail@darkodemic.com>
@@ -77,14 +86,47 @@ nfpms:
         dst: /usr/lib/modprobe.d/99-gpwebcam.conf
         file_info:
           mode: 0644
+      # RPM marks documentation as such (rpmlint), so the man page and
+      # README appear once per packager.
       - src: packaging/man/gpwebcam.1.gz
         dst: /usr/share/man/man1/gpwebcam.1.gz
+        packager: deb
+        file_info:
+          mode: 0644
+      - src: packaging/man/gpwebcam.1.gz
+        dst: /usr/share/man/man1/gpwebcam.1.gz
+        packager: archlinux
+        file_info:
+          mode: 0644
+      - src: packaging/man/gpwebcam.1.gz
+        dst: /usr/share/man/man1/gpwebcam.1.gz
+        packager: rpm
+        type: doc
         file_info:
           mode: 0644
       - src: README.md
         dst: /usr/share/doc/gpwebcam/README.md
+        packager: deb
         file_info:
           mode: 0644
+      - src: README.md
+        dst: /usr/share/doc/gpwebcam/README.md
+        packager: archlinux
+        file_info:
+          mode: 0644
+      - src: README.md
+        dst: /usr/share/doc/gpwebcam/README.md
+        packager: rpm
+        type: doc
+        file_info:
+          mode: 0644
+      # RPM removes only directories the package owns.
+      - dst: /usr/share/doc/gpwebcam
+        type: dir
+        packager: rpm
+      - dst: /usr/share/licenses/gpwebcam
+        type: dir
+        packager: rpm
       # Arch and Fedora keep license texts here; Debian uses a DEP-5
       # copyright file that points to /usr/share/common-licenses.
       - src: LICENSE
@@ -117,6 +159,10 @@ nfpms:
           - /usr/bin/ffmpeg
         recommends:
           - v4l2loopback
+    deb:
+      # Go builds without cgo are static on purpose.
+      lintian_overrides:
+        - statically-linked-binary
     rpm:
       summary: Use a GoPro connected over USB as a Linux webcam
     archlinux:
