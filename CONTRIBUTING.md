@@ -69,6 +69,20 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 - Files go only under `/usr`: `/usr/bin`, `/usr/lib/systemd/user`, `/usr/lib/modules-load.d`, `/usr/lib/modprobe.d`, `/usr/share/doc`, `/usr/share/licenses`. Nothing goes into `/etc` or a home directory.
 - The package never enables or starts the user service, and never loads the kernel module; the post-install script only prints instructions.
 
+## CI and releases
+
+- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the newest Go, then a snapshot build of all packages, kept as a workflow artifact.
+- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser builds the packages and creates a **draft** GitHub release with them, the archives and `checksums.txt`. A maintainer checks the draft and publishes it.
+- Actions are pinned to commits; Dependabot or a manual update moves them.
+- Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
+
+To release: make sure `main` is green, then tag and push:
+
+```sh
+git tag -a v0.1.0 -m "gpwebcam 0.1.0"
+git push origin v0.1.0
+```
+
 ## Rules for the code
 
 - **No root at runtime.** gpwebcam runs as the logged-in user. It never loads, unloads or reloads v4l2loopback, because other programs such as OBS may use it.

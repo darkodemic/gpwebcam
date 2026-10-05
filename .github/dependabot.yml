@@ -1,0 +1,9 @@
+# Keeps the commit-pinned GitHub Actions current: one pull request a
+# month when a new version of an action is out. gpwebcam has no Go module
+# dependencies to watch.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
