@@ -81,11 +81,22 @@ systemctl --user enable --now gpwebcam.service
 
 A microSD card is not needed.
 
+### 5. Check the setup
+
+```sh
+gpwebcam doctor
+```
+
+It checks ffmpeg, the module and the device, the service, the camera's connection and the firewall, and says what to fix. It only reads the camera's state, so it is safe to run while the service streams.
+
 ## Use
 
 - In your video application, choose the camera named **GoPro**.
 - When the camera connects, the picture switches from the placeholder to the camera, usually within about 3 seconds.
 - When you unplug it, the "Camera not connected" picture comes back. Plug it in again at any time; the application does not need a restart.
+- While there is no video, the picture says why: the camera is not connected, is waiting for its network, is starting, does not answer, or sends no video.
+- A desktop notification tells you when the camera connects, disconnects or has a problem. It needs `notify-send` (package `libnotify`, or `libnotify-bin` on Debian and Ubuntu); turn it off with `-notify=false`.
+- Decoding runs on the GPU when one is usable (VAAPI and others, through ffmpeg) and falls back to the CPU otherwise. On an AMD GPU this took a third less CPU time with no added delay. On a laptop where it would wake the discrete GPU, use `-hwdec none`.
 
 Logs and control:
 
@@ -125,6 +136,8 @@ The empty `ExecStart=` clears the packaged command before setting the new one. S
 | `-video-nr` | `-1` | Use `/dev/videoN` instead of finding the device by label. |
 | `-iface` | the only GoPro interface | GoPro network interface; needed only with several cameras. |
 | `-port` | `8554` | UDP port the camera streams to, from 1024 to 65535. |
+| `-hwdec` | `auto` | Hardware decoding: `auto` uses the GPU when it can, `none` always decodes on the CPU. |
+| `-notify` | `true` | Desktop notifications; `-notify=false` turns them off. |
 | `-ffmpeg` | `ffmpeg` | ffmpeg executable. |
 | `-dhcp-wait` | `30s` | How long to wait for the camera to give the computer an address. |
 | `-connect-wait` | `20s` | How long to wait for the camera to answer. |
@@ -134,6 +147,7 @@ Commands:
 
 - `gpwebcam run` keeps running and handles plugging and unplugging; it is what the service runs.
 - `gpwebcam start` streams one camera session and exits when it ends.
+- `gpwebcam doctor` checks the setup and says what to fix; it takes `-ffmpeg`, `-iface`, `-video-nr`, `-device-label`, `-port` and `-http-timeout`.
 - `gpwebcam list` lists connected GoPro network interfaces.
 - `gpwebcam version` prints the version.
 
@@ -155,7 +169,7 @@ gpwebcam finds its device by the **GoPro** label, so a different device number w
 
 ## Troubleshooting
 
-Read the log first: `journalctl --user -u gpwebcam -e`.
+Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `journalctl --user -u gpwebcam -e`.
 
 | Message or symptom | Likely cause and fix |
 |---|---|
@@ -164,16 +178,16 @@ Read the log first: `journalctl --user -u gpwebcam -e`.
 | The log stays at `waiting for a camera` | The camera is off, its USB mode is MTP instead of GoPro Connect, or the cable carries only power. On some models, the Media Mod hides the connection. |
 | `wait for IPv4 address on ...` | Nothing gives the GoPro connection an address. NetworkManager and systemd-networkd do it automatically; make sure the connection is not set to "ignore" or "disabled". |
 | `host address 10.42.0.1/24 is not in a GoPro network` | NetworkManager set up the connection in "shared" mode. Fix it with `nmcli connection modify "<connection>" ipv4.method auto`, then `nmcli connection up "<connection>"`; `nmcli device` shows the connection name. |
-| `camera did not answer within 20s` | Unplug the cable and plug it back in. Turning the camera off and on with the cable attached can leave it unresponsive. |
+| `the camera does not answer within 20s` | Unplug the cable and plug it back in. Turning the camera off and on with the cable attached can leave it unresponsive. |
 | `the camera reports streaming, but no video arrived` | gpwebcam retries by itself. If it keeps happening, a firewall or VPN is dropping the video: allow incoming UDP port 8554 on the GoPro connection. |
 | An application does not list the camera | The service was not running when the application started. Start the service, then restart the application once. |
-| An application reports the camera as busy | Close other applications that use the GoPro camera. |
+| An application reports the camera as busy | Another application has the camera open. Like any V4L2 camera, it can be used by one application at a time; close it in the other application first. |
 
 ## Limitations
 
 - The camera's webcam mode provides at most 1080p at 30 fps, with no audio and no stabilization.
 - One camera at a time.
-- No desktop notifications yet.
+- One application at a time can use the camera. This is a V4L2 rule that v4l2loopback enforces since version 0.14, the same as for a USB webcam.
 
 ## License
 

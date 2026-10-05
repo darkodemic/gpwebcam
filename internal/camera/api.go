@@ -2,6 +2,7 @@ package camera
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +13,7 @@ const HTTPPort = 8080
 
 // Open GoPro HTTP API 2.0 paths.
 const (
+	pathInfo      = "/gopro/camera/info"
 	pathWiredUSB  = "/gopro/camera/control/wired_usb"
 	pathKeepAlive = "/gopro/camera/keep_alive"
 	pathStatus    = "/gopro/webcam/status"
@@ -19,6 +21,10 @@ const (
 	pathStop      = "/gopro/webcam/stop"
 	pathExit      = "/gopro/webcam/exit"
 )
+
+// ErrNoAnswer means the camera's HTTP server did not answer within
+// StartOptions.Connect. A replug usually fixes it.
+var ErrNoAnswer = errors.New("the camera does not answer")
 
 // KeepAliveInterval is the spec's recommended keep-alive period.
 const KeepAliveInterval = 3 * time.Second
@@ -31,6 +37,26 @@ func (c *Client) DisableWiredUSBControl(ctx context.Context) error {
 		return err
 	}
 	return checkCommand("disable wired USB control", body)
+}
+
+// Info is what /gopro/camera/info says about the camera.
+type Info struct {
+	Model    string `json:"model_name"`
+	Firmware string `json:"firmware_version"`
+}
+
+// Info reads the camera's model and firmware version. It changes nothing on
+// the camera.
+func (c *Client) Info(ctx context.Context) (Info, error) {
+	body, err := c.get(ctx, pathInfo, "")
+	if err != nil {
+		return Info{}, err
+	}
+	var i Info
+	if err := json.Unmarshal(body, &i); err != nil {
+		return Info{}, fmt.Errorf("camera info: unexpected reply %q: %w", truncate(body), err)
+	}
+	return i, nil
 }
 
 // Status returns the webcam state.
@@ -101,7 +127,7 @@ func (c *Client) StartWebcam(ctx context.Context, o StartOptions) error {
 	err := retry(cctx, o.Poll, func() error { return c.DisableWiredUSBControl(cctx) })
 	cancel()
 	if err != nil {
-		return fmt.Errorf("camera did not answer within %v: %w", o.Connect, err)
+		return fmt.Errorf("%w within %v: %w", ErrNoAnswer, o.Connect, err)
 	}
 
 	st, err := c.Status(ctx)

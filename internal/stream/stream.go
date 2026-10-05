@@ -34,6 +34,10 @@ type Config struct {
 	// ffmpeg reads several times, so with no stream at all it gives up
 	// after about four timeouts (measured with ffmpeg 9.0.2).
 	ReadTimeout time.Duration
+	// HWAccel is ffmpeg's -hwaccel value: "auto" decodes on the GPU when
+	// one is usable and falls back to software otherwise; "" or "none"
+	// always decodes in software.
+	HWAccel string
 	// FirstFrame, when positive, ends the run with ErrNoVideo if no frame
 	// arrives this long after ffmpeg starts. It catches a camera that
 	// reports streaming but sends nothing much sooner than ReadTimeout,
@@ -60,6 +64,11 @@ func (c Config) Validate() error {
 	if c.FFmpeg == "" {
 		return fmt.Errorf("ffmpeg path must be set")
 	}
+	switch c.HWAccel {
+	case "", "none", "auto":
+	default:
+		return fmt.Errorf("hardware decoding %q: must be auto or none", c.HWAccel)
+	}
 	return nil
 }
 
@@ -73,10 +82,18 @@ func (c Config) Args() []string {
 	// timeout is in microseconds and applies to reads only.
 	url := fmt.Sprintf("udp://%s?timeout=%d&overrun_nonfatal=1",
 		c.Listen, c.ReadTimeout.Microseconds())
-	return []string{
+	var hw []string
+	if c.HWAccel == "auto" {
+		// Measured 2026-10-05 on an AMD GPU (VAAPI), 1080p30 H.264: 8.7 %
+		// of one core instead of 13.7 %, latency 74 ms instead of 71 ms.
+		hw = []string{"-hwaccel", "auto"}
+	}
+	return append([]string{
 		"-hide_banner",
 		"-nostdin",
-		"-loglevel", "warning",
+		// Warnings repeat on every start (the TS's audio and data streams,
+		// the yuvj420p range); errors such as decoding failures still show.
+		"-loglevel", "error",
 		// Input options go before -i, or ffmpeg applies them to the output.
 		// nobuffer drops the packets read while probing instead of queueing
 		// them, so the first frame shown is current. With the default 5 s
@@ -85,6 +102,7 @@ func (c Config) Args() []string {
 		"-fflags", "nobuffer",
 		"-flags", "low_delay",
 		"-analyzeduration", "1000000",
+	}, append(hw,
 		"-f", "mpegts",
 		"-i", url,
 		// The TS also carries AAC, an empty AC3 track and a private data
@@ -101,7 +119,7 @@ func (c Config) Args() []string {
 		// buffer until the next frame arrives.
 		"-flush_packets", "1",
 		"pipe:1",
-	}
+	)...)
 }
 
 // Run starts ffmpeg and passes every decoded frame to sink until ffmpeg

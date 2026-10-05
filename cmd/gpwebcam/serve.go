@@ -15,6 +15,7 @@ import (
 
 	"github.com/darkodemic/gpwebcam/internal/camera"
 	"github.com/darkodemic/gpwebcam/internal/feed"
+	"github.com/darkodemic/gpwebcam/internal/notify"
 	"github.com/darkodemic/gpwebcam/internal/placeholder"
 	"github.com/darkodemic/gpwebcam/internal/stream"
 	"github.com/darkodemic/gpwebcam/internal/usbnet"
@@ -27,6 +28,9 @@ const (
 	// pollInterval is how often gpwebcam looks for a camera, and checks that the
 	// interface of a running session still exists.
 	pollInterval = 500 * time.Millisecond
+	// devicePoll is how often gpwebcam looks for its loopback device while
+	// the module is not loaded yet.
+	devicePoll = 2 * time.Second
 	// retryDelay is the pause before a new session when the last one failed
 	// with the camera still connected.
 	retryDelay = 2 * time.Second
@@ -37,20 +41,42 @@ const (
 	firstFrame = 6 * time.Second
 )
 
-// errUnplugged ends a session whose interface disappeared.
-var errUnplugged = errors.New("camera was unplugged")
+// Causes that end a session when its interface disappears.
+var (
+	errUnplugged = errors.New("camera was unplugged")
+	// errRenamed: the interface vanished but its USB device is still there.
+	// udev renames the kernel's "eth0" to a predictable name about 0.5 s
+	// after the camera appears, and a session may have started in between.
+	errRenamed = errors.New("network interface was renamed")
+)
+
+// noVideoHint is how many sessions in a row must end without video before
+// the placeholder suggests a firewall.
+const noVideoHint = 3
 
 // server owns the loopback device for its whole life, so the device stays
 // listed as a camera between sessions.
 type server struct {
 	f      startFlags
 	log    *slog.Logger
+	notify *notify.Notifier // nil when disabled or notify-send is missing
 	feed   *feed.Feed
 	width  int
 	height int
 
 	mu     sync.Mutex
 	frames map[string][]byte // rendered placeholders by status line
+
+	// softwareOnly is set after GPU decoding gave no video twice in a row.
+	softwareOnly bool
+}
+
+// hwdec returns ffmpeg's -hwaccel value for the next session.
+func (s *server) hwdec() string {
+	if s.softwareOnly {
+		return "none"
+	}
+	return s.f.hwdec
 }
 
 // cmdServe implements both "run" (once false: wait for cameras forever) and
@@ -61,10 +87,6 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		name = "start"
 	}
 	f, err := parseStart(name, args)
-	if err != nil {
-		return err
-	}
-	device, err := findDevice(f)
 	if err != nil {
 		return err
 	}
@@ -85,46 +107,124 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		stop()
 	}()
 
+	var notifier *notify.Notifier
+	if f.notify {
+		notifier = notify.New()
+	}
+	device, err := findDevice(f)
+	if err != nil && !once {
+		notifier.Send(notify.Normal, "gpwebcam is waiting for its video device",
+			"Load the v4l2loopback module or reboot. See: journalctl --user -u gpwebcam")
+		// At boot the user service may start before the module is loaded,
+		// or the module may be installed later: wait instead of exiting
+		// into a restart loop.
+		log.Warn("waiting for the loopback device", "err", err)
+		device, err = waitForDevice(ctx, f)
+	}
+	if err != nil {
+		return interrupted(ctx, err, log)
+	}
+
 	w, h := f.res.Size()
 	out, err := v4l2.OpenOutput(device, w, h)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	s := &server{f: f, log: log, feed: feed.New(out, idleInterval), width: w, height: h, frames: map[string][]byte{}}
+	s := &server{f: f, log: log, notify: notifier, feed: feed.New(out, idleInterval), width: w, height: h, frames: map[string][]byte{}}
 	go s.feed.Run(ctx)
 	log.Info("feeding loopback device", "device", device, "size", fmt.Sprintf("%dx%d", w, h))
-	for _, st := range []string{placeholder.NotConnected, placeholder.Connecting, placeholder.Retrying} {
+	for _, st := range placeholder.All {
 		s.placeholder(ctx, st)
 	}
 
 	if once {
-		s.show(ctx, placeholder.Connecting)
+		s.show(ctx, placeholder.WaitingNetwork)
 		return interrupted(ctx, s.session(ctx, iface), log)
 	}
 	s.show(ctx, placeholder.NotConnected)
+	noVideo := 0
 	for {
 		iface, err := s.waitForCamera(ctx)
 		if err != nil {
 			return interrupted(ctx, err, log)
 		}
-		s.show(ctx, placeholder.Connecting)
+		s.show(ctx, placeholder.WaitingNetwork)
 		err = s.session(ctx, iface)
-		if ctx.Err() != nil {
+		switch {
+		case ctx.Err() != nil:
+			log.Info("stopped on signal")
+			return nil
+		case errors.Is(err, errRenamed):
+			log.Info("network interface renamed, starting again", "old", iface.Name)
+			continue
+		case errors.Is(err, errUnplugged):
+			log.Info("camera unplugged", "iface", iface.Name)
+			noVideo = 0
+			s.show(ctx, placeholder.NotConnected)
+			s.notify.Send(notify.Low, "GoPro disconnected", "The webcam shows a placeholder until the camera is back.")
+			continue
+		}
+		log.Warn("session ended", "iface", iface.Name, "err", err)
+		if errors.Is(err, stream.ErrNoVideo) {
+			noVideo++
+		} else {
+			noVideo = 0
+		}
+		if noVideo >= 2 && s.hwdec() == "auto" {
+			// A GPU decoder that initialises but yields nothing would
+			// otherwise fail every session; software decoding always works.
+			log.Warn("no video twice with hardware decoding, using software decoding from now on")
+			s.softwareOnly = true
+		}
+		if _, lerr := net.InterfaceByName(iface.Name); lerr != nil {
+			s.show(ctx, placeholder.NotConnected)
+			continue
+		}
+		// Still connected: the camera refused or stalled. Say why on the
+		// picture and retry later rather than hammer it.
+		status := retryStatus(err, noVideo)
+		s.show(ctx, status)
+		switch status {
+		case placeholder.NoVideo:
+			s.notify.Send(notify.Normal, "GoPro sends no video",
+				fmt.Sprintf("Is a firewall blocking UDP port %d? See: journalctl --user -u gpwebcam", f.port))
+		case placeholder.NotAnswering:
+			s.notify.Send(notify.Normal, "GoPro does not answer", "Unplug and replug the USB cable.")
+		case placeholder.Problem:
+			s.notify.Send(notify.Normal, "GoPro problem", "gpwebcam keeps retrying. See: journalctl --user -u gpwebcam")
+		}
+		if !sleep(ctx, retryDelay) {
 			log.Info("stopped on signal")
 			return nil
 		}
-		log.Warn("session ended", "iface", iface.Name, "err", err)
-		if _, lerr := net.InterfaceByName(iface.Name); lerr == nil {
-			// Still connected: the camera refused or stalled. Retry later
-			// rather than hammer it.
-			s.show(ctx, placeholder.Retrying)
-			if !sleep(ctx, retryDelay) {
-				log.Info("stopped on signal")
-				return nil
-			}
+	}
+}
+
+// retryStatus picks the placeholder line for a session that failed while
+// the camera stayed connected.
+func retryStatus(err error, noVideo int) string {
+	switch {
+	case errors.Is(err, stream.ErrNoVideo) && noVideo >= noVideoHint:
+		return placeholder.NoVideo
+	case errors.Is(err, stream.ErrNoVideo):
+		return placeholder.Retrying
+	case errors.Is(err, camera.ErrNoAnswer):
+		return placeholder.NotAnswering
+	default:
+		return placeholder.Problem
+	}
+}
+
+// waitForDevice polls until findDevice succeeds or ctx ends.
+func waitForDevice(ctx context.Context, f startFlags) (string, error) {
+	for {
+		if !sleep(ctx, devicePoll) {
+			return "", ctx.Err()
 		}
-		s.show(ctx, placeholder.NotConnected)
+		if device, err := findDevice(f); err == nil {
+			return device, nil
+		}
 	}
 }
 
@@ -132,7 +232,14 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 // card label is -device-label.
 func findDevice(f startFlags) (string, error) {
 	if f.videoNr >= 0 {
-		return v4l2.DevicePath(f.videoNr)
+		p, err := v4l2.DevicePath(f.videoNr)
+		if err != nil {
+			return "", err
+		}
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("%w (is v4l2loopback loaded with video_nr=%d?)", err, f.videoNr)
+		}
+		return p, nil
 	}
 	return v4l2.FindByLabel("/sys", f.label)
 }
@@ -141,6 +248,7 @@ func findDevice(f startFlags) (string, error) {
 // an error only when ctx ends or the device can no longer be written.
 func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 	var last string
+	shown := false
 	for {
 		if err := s.feed.Err(); err != nil {
 			return usbnet.Interface{}, fmt.Errorf("write placeholder: %w", err)
@@ -149,6 +257,10 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 		if err == nil {
 			s.log.Info("found camera", "iface", iface.Name, "product", iface.Product)
 			return iface, nil
+		}
+		if !shown {
+			s.show(ctx, placeholder.NotConnected)
+			shown = true
 		}
 		// Log each new reason once, not on every poll.
 		if msg := err.Error(); msg != last {
@@ -194,7 +306,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 	f, log := s.f, s.log
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
-	go watchIface(ctx, iface.Name, cancel)
+	go watchIface(ctx, iface, cancel)
 	go func() {
 		// Show the placeholder as soon as the cable is out, not when
 		// ffmpeg has finished exiting.
@@ -215,6 +327,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		return err
 	}
 	log.Info("link is up", "iface", iface.Name, "host", host, "camera", camAddr)
+	s.show(ctx, placeholder.Starting)
 
 	cam := camera.NewClient(netip.AddrPortFrom(camAddr, camera.HTTPPort), host.Addr(), f.httpTimeout)
 	err = cam.StartWebcam(ctx, camera.StartOptions{
@@ -231,9 +344,9 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 	// Stop even after a failed start: the camera may be half way into
 	// webcam mode.
 	defer func() {
-		// An unplugged camera has nothing left to stop.
+		// Without the interface the camera cannot be reached anyway.
 		if _, err := net.InterfaceByName(iface.Name); err != nil {
-			log.Info("camera is gone, nothing to stop", "iface", iface.Name)
+			log.Info("interface is gone, not stopping the camera", "iface", iface.Name)
 			return
 		}
 		// ctx may already be cancelled; STOP gets its own short deadline.
@@ -248,12 +361,13 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 	if err != nil {
 		return ended(ctx, err)
 	}
-	log.Info("webcam started", "res", f.res, "fov", f.fov, "port", f.port)
+	log.Info("webcam started", "res", f.res, "fov", f.fov, "port", f.port, "hwdec", s.hwdec())
 
 	kctx, cancelKeepAlive := context.WithCancel(ctx)
 	defer cancelKeepAlive()
 	go keepAlive(kctx, cam, f.httpTimeout, log)
 
+	var videoFlowing sync.Once
 	err = stream.Run(ctx, stream.Config{
 		FFmpeg:      f.ffmpeg,
 		Listen:      netip.AddrPortFrom(host.Addr(), f.port),
@@ -261,33 +375,50 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		Height:      s.height,
 		ReadTimeout: 5 * time.Second,
 		FirstFrame:  firstFrame,
-	}, os.Stderr, 3*time.Second, func(frame []byte) error {
+		HWAccel:     s.hwdec(),
+	}, newLineLogger(log, "ffmpeg"), 3*time.Second, func(frame []byte) error {
 		if ctx.Err() != nil {
 			return nil // ending: leave the device to the placeholder
 		}
+		videoFlowing.Do(func() {
+			log.Info("video is flowing")
+			s.notify.Send(notify.Low, "GoPro connected",
+				fmt.Sprintf("Streaming %sp with the %s field of view.", f.res, f.fov))
+		})
 		return s.feed.Live(frame)
 	})
 	return ended(ctx, err)
 }
 
 // ended picks the error a session reports: nil after a signal, errUnplugged
-// after the interface disappeared, otherwise err.
+// or errRenamed after the interface disappeared, otherwise err.
 func ended(ctx context.Context, err error) error {
 	if ctx.Err() == nil {
 		return err
 	}
-	if cause := context.Cause(ctx); errors.Is(cause, errUnplugged) {
+	switch cause := context.Cause(ctx); {
+	case errors.Is(cause, errUnplugged):
 		return errUnplugged
+	case errors.Is(cause, errRenamed):
+		return errRenamed
 	}
 	return nil
 }
 
-// watchIface cancels the session with errUnplugged once the interface is
-// gone, so the placeholder appears without waiting for ffmpeg's timeout.
-func watchIface(ctx context.Context, name string, cancel context.CancelCauseFunc) {
+// watchIface ends the session once the interface is gone, so the
+// placeholder appears without waiting for ffmpeg's timeout. If the USB
+// device is still there, the interface was only renamed.
+func watchIface(ctx context.Context, iface usbnet.Interface, cancel context.CancelCauseFunc) {
 	for sleep(ctx, pollInterval) {
-		if _, err := net.InterfaceByName(name); err != nil {
-			cancel(errUnplugged)
+		if _, err := net.InterfaceByName(iface.Name); err != nil {
+			// On unplug the interface can go a moment before the USB
+			// device, so look at the device again a little later.
+			sleep(ctx, 300*time.Millisecond)
+			if _, err := os.Stat(iface.USBPath); err == nil {
+				cancel(errRenamed)
+			} else {
+				cancel(errUnplugged)
+			}
 			return
 		}
 	}

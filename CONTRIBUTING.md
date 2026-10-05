@@ -13,14 +13,15 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 | Path | What it holds |
 |---|---|
-| `cmd/gpwebcam` | The command line: `run`, `start`, `list`, `version`; the session loop and the watchdog. |
+| `cmd/gpwebcam` | The command line: `run`, `start`, `doctor`, `list`, `version`; the session loop, the watchdog and the ffmpeg log filter. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
 | `internal/stream` | Runs ffmpeg, which decodes the camera's MPEG-TS stream and hands raw frames over a pipe. |
 | `internal/feed` | Keeps the loopback device supplied: live frames, or the placeholder between them. |
-| `internal/placeholder` | Renders the "Camera not connected" picture. |
+| `internal/placeholder` | Renders the placeholder pictures and their status lines. |
+| `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format and finds it by label. |
-| `packaging/` | Files the packages install: systemd user unit, module configuration, Debian copyright, post-install message. |
+| `packaging/` | Files the packages install: systemd user unit, module configuration, man page, Debian copyright, post-install message. |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
 | `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results, written in Serbian. |
 
@@ -35,6 +36,7 @@ go test -race ./...
 - Some tests start the real ffmpeg on the loopback network interface; they are skipped when ffmpeg is missing. No camera is needed.
 - To embed a version: `go build -ldflags "-X main.version=$(git describe --always --dirty)" -o gpwebcam ./cmd/gpwebcam`.
 - To check that the code still builds with the oldest supported Go: `mise exec go@1.22 -- go test ./...`.
+- The man page is `packaging/man/gpwebcam.1`; preview it with `man -l packaging/man/gpwebcam.1` and check it with `groff -man -ww -z packaging/man/gpwebcam.1`. GoReleaser compresses it before packaging.
 
 ### Run it against a camera
 

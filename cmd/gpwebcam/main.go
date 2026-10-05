@@ -28,6 +28,7 @@ commands:
   run       keep the loopback device fed: camera video whenever a GoPro
             is connected, a placeholder picture otherwise (service mode)
   start     stream one camera session, then exit
+  doctor    check the setup and say what to fix
   list      list GoPro network interfaces
   version   print the version
 
@@ -54,6 +55,8 @@ func run(args []string, stdout io.Writer, log *slog.Logger) error {
 		return cmdServe(args[1:], log, false)
 	case "start":
 		return cmdServe(args[1:], log, true)
+	case "doctor":
+		return cmdDoctor(args[1:], stdout)
 	case "list":
 		return cmdList(args[1:], stdout)
 	case "version":
@@ -94,6 +97,8 @@ type startFlags struct {
 	port        uint16
 	videoNr     int
 	label       string
+	notify      bool
+	hwdec       string
 	ffmpeg      string
 	dhcpWait    time.Duration
 	connectWait time.Duration
@@ -113,6 +118,8 @@ func parseStart(name string, args []string) (startFlags, error) {
 	})
 	fs.IntVar(&f.videoNr, "video-nr", -1, "v4l2loopback device number, /dev/videoN; -1 finds the device by -device-label")
 	fs.StringVar(&f.label, "device-label", v4l2.DefaultLabel, "card_label of the v4l2loopback device to use")
+	fs.BoolVar(&f.notify, "notify", true, "show desktop notifications through notify-send")
+	fs.StringVar(&f.hwdec, "hwdec", "auto", "hardware decoding: auto (GPU when usable, else software) or none")
 	fs.StringVar(&f.ffmpeg, "ffmpeg", "ffmpeg", "ffmpeg executable")
 	fs.DurationVar(&f.dhcpWait, "dhcp-wait", 30*time.Second, "how long to wait for an IPv4 address on the interface")
 	fs.DurationVar(&f.connectWait, "connect-wait", 20*time.Second, "how long to wait for the camera's HTTP server to answer")
@@ -127,6 +134,9 @@ func parseStart(name string, args []string) (startFlags, error) {
 		if err := usbnet.ValidateName(f.iface); err != nil {
 			return f, err
 		}
+	}
+	if f.hwdec != "auto" && f.hwdec != "none" {
+		return f, fmt.Errorf("-hwdec %q: must be auto or none", f.hwdec)
 	}
 	if f.videoNr < -1 || f.videoNr > v4l2.MaxDeviceNumber {
 		return f, fmt.Errorf("-video-nr %d: must be -1 (find by label) or 0 to %d", f.videoNr, v4l2.MaxDeviceNumber)

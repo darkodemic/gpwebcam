@@ -15,19 +15,28 @@ const Title = "gpwebcam - GoPro webcam for Linux"
 
 // Status lines shown under the title.
 const (
-	NotConnected = "Camera not connected"
-	Connecting   = "Connecting to camera"
-	Retrying     = "No video from camera, retrying"
+	NotConnected   = "Camera not connected"
+	WaitingNetwork = "Camera found, waiting for its network"
+	Starting       = "Starting the camera"
+	Retrying       = "No video from camera, retrying"
+	NoVideo        = "No video from camera. Is a firewall blocking UDP?"
+	NotAnswering   = "Camera not answering. Unplug and replug the cable."
+	Problem        = "Camera problem, retrying. See the gpwebcam log."
 )
 
+// All lists every status line, for rendering them up front.
+var All = []string{NotConnected, WaitingNetwork, Starting, Retrying, NoVideo, NotAnswering, Problem}
+
 // validText reports whether s is safe to put into a drawtext filter
-// without escaping: letters, digits, spaces, '-', ',' and '.'. Commas are
-// fine because the text is quoted.
+// without escaping: letters, digits, spaces and - , . ? ( ). The text is
+// quoted, so commas and parentheses are literal; quotes, colons, percent
+// signs and backslashes, which drawtext or the filter parser interpret,
+// are rejected.
 func validText(s string) bool {
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		case r == ' ', r == '-', r == ',', r == '.':
+		case r == ' ', r == '-', r == ',', r == '.', r == '?', r == '(', r == ')':
 		default:
 			return false
 		}

@@ -58,6 +58,8 @@ func (f *fakeCamera) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{}`)
 	case pathKeepAlive:
 		fmt.Fprint(w, `{}`)
+	case pathInfo:
+		fmt.Fprint(w, `{"model_number":"65","model_name":"HERO13 Black","firmware_version":"H24.01.02.10.00","serial_number":"C0000123456789"}`)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, `{}`)
@@ -180,5 +182,13 @@ func TestRedirectNotFollowed(t *testing.T) {
 	c := NewClient(addr, netip.MustParseAddr("127.0.0.1"), time.Second)
 	if err := c.KeepAlive(context.Background()); !IsStatus(err, http.StatusFound) {
 		t.Errorf("redirect: %v, want HTTP 302 error", err)
+	}
+}
+
+func TestInfo(t *testing.T) {
+	c := newTestClient(t, &fakeCamera{})
+	i, err := c.Info(context.Background())
+	if err != nil || i.Model != "HERO13 Black" || i.Firmware != "H24.01.02.10.00" {
+		t.Errorf("Info = %+v, %v", i, err)
 	}
 }

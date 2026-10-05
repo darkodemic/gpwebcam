@@ -1,0 +1,146 @@
+.TH GPWEBCAM 1 "2026-10-05" "gpwebcam" "User Commands"
+.SH NAME
+gpwebcam \- use a GoPro connected over USB as a Linux webcam
+.SH SYNOPSIS
+.B gpwebcam run
+.RI [ options ]
+.br
+.B gpwebcam start
+.RI [ options ]
+.br
+.B gpwebcam doctor
+.RI [ options ]
+.br
+.B gpwebcam list
+.br
+.B gpwebcam version
+.SH DESCRIPTION
+.B gpwebcam
+starts a GoPro's webcam mode through the Open GoPro HTTP API and writes
+its video into a v4l2loopback device, which browsers, Zoom, OBS and other
+V4L2 applications use as a camera named
+.BR GoPro .
+It runs as the logged-in user and needs no root.
+.PP
+While no camera sends video, gpwebcam writes a placeholder picture that
+says why, so applications keep listing the camera.
+.SH COMMANDS
+.TP
+.B run
+Keep running: wait for a camera, stream it while it is connected, and show
+the placeholder while it is not. This is what the systemd user service
+.B gpwebcam.service
+runs.
+.TP
+.B start
+Stream one camera session and exit when it ends.
+.TP
+.B doctor
+Check ffmpeg, the v4l2loopback module and device, the service, the camera's
+connection and the firewall, and print what to fix. Reads the camera's
+state but changes nothing. Exits with status 1 if a check fails.
+.TP
+.B list
+List the network interfaces of connected GoPro cameras.
+.TP
+.B version
+Print the version.
+.SH OPTIONS
+.B run
+and
+.B start
+take these options;
+.B doctor
+takes -ffmpeg, -iface, -video-nr, -device-label, -port and -http-timeout.
+.TP
+.BI \-res " 1080|720"
+Resolution of the stream. Default 1080.
+.TP
+.BI \-fov " wide|narrow|superview|linear"
+Field of view. Default linear.
+.TP
+.BI \-device\-label " label"
+card_label of the v4l2loopback device to write to. Default GoPro.
+.TP
+.BI \-video\-nr " n"
+Write to /dev/video\fIn\fR instead of finding the device by label.
+Default \-1, which means: find it by label.
+.TP
+.BI \-iface " name"
+GoPro network interface. Needed only when several cameras are connected.
+.TP
+.BI \-port " port"
+UDP port the camera streams to, 1024 to 65535. Default 8554.
+.TP
+.BI \-ffmpeg " path"
+ffmpeg executable. Default ffmpeg from PATH.
+.TP
+.BI \-hwdec " auto|none"
+Hardware decoding. auto decodes on the GPU when ffmpeg can use one and
+falls back to the CPU otherwise; after two sessions in a row without video
+it switches to the CPU for good. none always decodes on the CPU. Default auto.
+.TP
+.BI \-notify= bool
+Show desktop notifications through notify-send. Default true.
+.TP
+.BI \-dhcp\-wait " duration"
+How long to wait for the camera to give the computer an IPv4 address.
+Default 30s.
+.TP
+.BI \-connect\-wait " duration"
+How long to wait for the camera's HTTP server to answer. Default 20s.
+.TP
+.BI \-http\-timeout " duration"
+Timeout of each request to the camera. Default 5s (3s for doctor).
+.SH FILES
+.TP
+.I /usr/lib/systemd/user/gpwebcam.service
+The user service. Enable it with
+.BR "systemctl \-\-user enable \-\-now gpwebcam.service" .
+.TP
+.I /usr/lib/modprobe.d/99-gpwebcam.conf
+v4l2loopback options: /dev/video42 labelled GoPro, and a second device for
+OBS Virtual Camera. A file with the same name in /etc/modprobe.d replaces it.
+.TP
+.I /usr/lib/modules-load.d/gpwebcam.conf
+Loads v4l2loopback at boot.
+.SH EXIT STATUS
+0 on success or when stopped by SIGINT or SIGTERM, 1 on an error or when a
+.B doctor
+check fails.
+.SH EXAMPLES
+Change resolution and field of view for the service:
+.PP
+.RS
+.nf
+systemctl \-\-user edit gpwebcam.service
+.fi
+.RE
+.PP
+and set
+.PP
+.RS
+.nf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/gpwebcam run \-res 720 \-fov wide
+.fi
+.RE
+.PP
+Follow the log:
+.PP
+.RS
+.nf
+journalctl \-\-user \-u gpwebcam \-f
+.fi
+.RE
+.SH NOTES
+Only one application at a time can use a V4L2 camera; a second one gets
+"Device or resource busy". v4l2loopback enforces this since version 0.14. On the camera, Preferences > Connections > USB
+Connection must be GoPro Connect, not MTP.
+.SH SEE ALSO
+.BR ffmpeg (1),
+.BR modprobe.d (5),
+.BR systemctl (1)
+.PP
+https://github.com/darkodemic/gpwebcam

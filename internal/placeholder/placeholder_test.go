@@ -7,7 +7,7 @@ import (
 )
 
 func TestValidText(t *testing.T) {
-	for _, ok := range []string{Title, NotConnected, Connecting, Retrying} {
+	for _, ok := range append([]string{Title}, All...) {
 		if !validText(ok) {
 			t.Errorf("validText(%q) = false", ok)
 		}
