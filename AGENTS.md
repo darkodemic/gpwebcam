@@ -2,7 +2,7 @@
 
 Instructions for coding agents (Claude Code, Codex and others) working in this repository. `CLAUDE.md` only imports this file, so this is the one place to edit.
 
-`gpwebcam` makes a GoPro connected over USB usable as a regular Linux webcam, exposed through v4l2loopback as the device labelled "GoPro" (`/dev/video42` by default). First target: HERO13 Black, firmware 02.10. Until 2026-10-05 it was called `gw`; older documents use that name, and the local directory is still `~/Projects/gw`.
+`gpwebcam` makes a GoPro connected over USB usable as a regular Linux webcam, exposed through v4l2loopback as the device labelled "GoPro" (`/dev/video42` by default). First target: HERO13 Black, firmware 02.10. Until 2026-10-05 it was called `gw`; older documents use that name. The local directory is `~/Projects/gpwebcam` (renamed from `~/Projects/gw` on 2026-10-05).
 
 It is a from-scratch rewrite. The old bash tool in `~/Projects/gopro_as_webcam_on_linux` (a fork of `jschmid1/gopro_as_webcam_on_linux`) is reference material only. Do not copy code from it: it is Apache-2.0, and its design is what we are replacing.
 

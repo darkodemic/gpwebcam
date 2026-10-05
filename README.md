@@ -4,7 +4,7 @@
 
 It runs as a systemd user service without root. The service waits for the camera, starts its webcam mode when you plug it in, and shows a "Camera not connected" picture while it is unplugged, so applications keep listing the camera. In our measurements the delay from scene to the Zoom preview is about 0.2 seconds.
 
-**Status:** early. It is tested on a HERO13 Black with firmware 02.10 (`H24.01.02.10.00`) on Arch Linux, at 1080p and 30 fps. The `.deb` and `.rpm` packages are built but not yet tested on Debian, Ubuntu or Fedora. Dedicated recording mode is not implemented yet. There is no release yet; until the first one, build the packages as described in [CONTRIBUTING.md](CONTRIBUTING.md).
+**Status:** early, no release yet. It is tested with a HERO13 Black, firmware 02.10 (`H24.01.02.10.00`), on Arch Linux, at 1080p and 30 fps. The `.deb` and `.rpm` packages install, run and uninstall cleanly on Debian 13, Ubuntu 24.04 and Fedora 44, but have not been tried there with a camera yet. Dedicated recording mode is not implemented yet.
 
 Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -20,6 +20,8 @@ Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 1. Install the package
 
+Packages will be on the [releases page](https://github.com/darkodemic/gpwebcam/releases) from the first release on. Until then, build them as described in [CONTRIBUTING.md](CONTRIBUTING.md), then install them as below.
+
 **Arch Linux**
 
 ```sh
@@ -29,7 +31,7 @@ sudo pacman -U gpwebcam-<version>-x86_64.pkg.tar.zst
 
 - `v4l2loopback-dkms` builds the module for your kernel; `linux-headers` must match the kernel you run (use `linux-lts-headers` for `linux-lts`).
 
-**Debian and Ubuntu** (untested)
+**Debian and Ubuntu** (not yet tried with a camera)
 
 ```sh
 sudo apt install ./gpwebcam_<version>_amd64.deb
@@ -38,7 +40,7 @@ sudo apt install ./gpwebcam_<version>_amd64.deb
 - apt also installs ffmpeg, and v4l2loopback-dkms as a recommended package.
 - Ubuntu 24.04 already ships the module with its kernel.
 
-**Fedora** (untested)
+**Fedora** (not yet tried with a camera)
 
 v4l2loopback is not in Fedora, and Fedora's own ffmpeg cannot decode H.264 without extra steps. Both come from [RPM Fusion](https://rpmfusion.org/Configuration):
 

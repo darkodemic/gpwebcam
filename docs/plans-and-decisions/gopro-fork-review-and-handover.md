@@ -5,7 +5,7 @@
 - **Owner:** Darko
 - **Related:** ADR 0001 (Go kao jezik implementacije); ADR 0002 (Open GoPro HTTP API za upravljanje kamerom); `first-slice-gw-start.md`; `open-gopro-webcam-api.md`; `upstream-issues-review.md`; fork `darkodemic/gopro_as_webcam_on_linux` (lokalno `~/Projects/gopro_as_webcam_on_linux`, do 2026-09-29 `gopro-tux`); upstream `jschmid1/gopro_as_webcam_on_linux`
 
-Ova beleška zamenjuje prenos sesije. Nova sesija u `~/Projects/gw` počinje čitanjem ovog fajla.
+Ova beleška zamenjuje prenos sesije. Nova sesija u `~/Projects/gpwebcam` (do 2026-10-05 `~/Projects/gw`) počinje čitanjem ovog fajla.
 
 ## 1. Zašto od nule
 
