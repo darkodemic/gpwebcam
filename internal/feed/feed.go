@@ -14,29 +14,43 @@ type Sink interface {
 	WriteFrame([]byte) error
 }
 
-// Feed writes to one Sink, either the idle frame on a timer or live frames
-// as they arrive.
+// Source supplies the idle picture. Frame gets the time since the source
+// was set, so an animated picture knows which step to show.
+type Source interface {
+	Frame(elapsed time.Duration) []byte
+}
+
+// Still is a Source that is always the same frame.
+type Still []byte
+
+// Frame implements Source.
+func (s Still) Frame(time.Duration) []byte { return s }
+
+// Feed writes to one Sink, either the idle picture on a timer or live
+// frames as they arrive.
 type Feed struct {
 	sink     Sink
 	interval time.Duration
+	now      func() time.Time
 
-	mu   sync.Mutex
-	idle []byte // nil while live frames flow
-	err  error  // last write error of the idle loop
+	mu        sync.Mutex
+	idle      Source // nil while live frames flow
+	idleSince time.Time
+	err       error // last write error of the idle loop
 }
 
-// New returns a Feed that repeats the idle frame every interval.
+// New returns a Feed that writes the idle picture every interval.
 func New(sink Sink, interval time.Duration) *Feed {
-	return &Feed{sink: sink, interval: interval}
+	return &Feed{sink: sink, interval: interval, now: time.Now}
 }
 
-// Idle switches to repeating frame until the next Live call. The first
-// copy is written at once, so the device has a picture immediately.
-func (f *Feed) Idle(frame []byte) error {
+// Idle switches to src until the next Live call. Its first frame is written
+// at once, so the device has a picture immediately.
+func (f *Feed) Idle(src Source) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.idle = frame
-	return f.sink.WriteFrame(frame)
+	f.idle, f.idleSince = src, f.now()
+	return f.sink.WriteFrame(src.Frame(0))
 }
 
 // Live writes a camera frame and stops the idle repeats.
@@ -47,7 +61,7 @@ func (f *Feed) Live(frame []byte) error {
 	return f.sink.WriteFrame(frame)
 }
 
-// Run repeats the idle frame until ctx ends. Write errors are kept for Err;
+// Run writes the idle picture until ctx ends. Write errors are kept for Err;
 // a missing device ends the process elsewhere.
 func (f *Feed) Run(ctx context.Context) {
 	t := time.NewTicker(f.interval)
@@ -60,7 +74,7 @@ func (f *Feed) Run(ctx context.Context) {
 		}
 		f.mu.Lock()
 		if f.idle != nil {
-			f.err = f.sink.WriteFrame(f.idle)
+			f.err = f.sink.WriteFrame(f.idle.Frame(f.now().Sub(f.idleSince)))
 		}
 		f.mu.Unlock()
 	}

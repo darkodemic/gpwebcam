@@ -18,7 +18,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
 | `internal/stream` | Runs ffmpeg, which decodes the camera's MPEG-TS stream and hands raw frames over a pipe. |
 | `internal/feed` | Keeps the loopback device supplied: live frames, or the placeholder between them. |
-| `internal/placeholder` | Renders the placeholder pictures and their status lines. |
+| `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format and finds it by label. |
 | `packaging/` | Files the packages install: systemd user unit, module configuration, man page, Debian copyright, post-install message. |

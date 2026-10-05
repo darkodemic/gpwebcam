@@ -53,11 +53,11 @@ func TestArgsHWAccel(t *testing.T) {
 	if slices.Contains(c.Args(), "-hwaccel") {
 		t.Error("-hwaccel without HWAccel")
 	}
-	c.HWAccel = "auto"
+	c.HWAccel = "vaapi"
 	args := c.Args()
 	j, i := slices.Index(args, "-hwaccel"), slices.Index(args, "-i")
-	if j < 0 || j > i || args[j+1] != "auto" {
-		t.Errorf("-hwaccel auto missing or after -i: %q", args)
+	if j < 0 || j > i || args[j+1] != "vaapi" {
+		t.Errorf("-hwaccel vaapi missing or after -i: %q", args)
 	}
 	c.HWAccel = "cuda"
 	if err := c.Validate(); err == nil {
@@ -169,9 +169,11 @@ func TestRunStreamStops(t *testing.T) {
 	c := testConfig()
 	c.Listen = netip.MustParseAddrPort("127.0.0.1:47556")
 	c.Width, c.Height = 640, 360 // ffmpeg scales the 320x240 input
-	// GPU decoding where available, software elsewhere: frames must arrive
-	// either way.
-	c.HWAccel = "auto"
+	// GPU decoding where VAAPI works, software elsewhere: frames must
+	// arrive either way.
+	if ProbeVAAPI(context.Background(), "ffmpeg") == nil {
+		c.HWAccel = "vaapi"
+	}
 	c.ReadTimeout = 500 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

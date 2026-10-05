@@ -94,9 +94,19 @@ It checks ffmpeg, the module and the device, the service, the camera's connectio
 - In your video application, choose the camera named **GoPro**.
 - When the camera connects, the picture switches from the placeholder to the camera, usually within about 3 seconds.
 - When you unplug it, the "Camera not connected" picture comes back. Plug it in again at any time; the application does not need a restart.
-- While there is no video, the picture says why: the camera is not connected, is waiting for its network, is starting, does not answer, or sends no video.
-- A desktop notification tells you when the camera connects, disconnects or has a problem. It needs `notify-send` (package `libnotify`, or `libnotify-bin` on Debian and Ubuntu); turn it off with `-notify=false`.
-- Decoding runs on the GPU when one is usable (VAAPI and others, through ffmpeg) and falls back to the CPU otherwise. On an AMD GPU this took a third less CPU time with no added delay. On a laptop where it would wake the discrete GPU, use `-hwdec none`.
+- While there is no video, the picture says why, and names the camera model: it is not connected, was found and waits for its network, is starting, does not answer, or sends no video. Dots after the text keep moving while gpwebcam waits for something, so you can tell it has not frozen.
+- A desktop notification tells you when the camera connects, disconnects or has a problem, for example "GoPro HERO13 Black connected". It needs `notify-send` (package `libnotify`, or `libnotify-bin` on Debian and Ubuntu); turn it off with `-notify=false`.
+- Decoding runs on the GPU through VAAPI (AMD and Intel graphics) when ffmpeg can open a VAAPI device, and on the CPU otherwise. On an AMD GPU this took a third less CPU time with no noticeable added delay. If GPU decoding gives no picture twice in a row, gpwebcam switches to the CPU by itself. On a laptop where it would wake the discrete GPU, use `-hwdec none`.
+
+### Camera models
+
+gpwebcam is tested with the **HERO13 Black**. Other models that support webcam mode over USB may work, since the Open GoPro API also lists HERO9 to HERO12 in earlier versions. With an untested model, gpwebcam tries anyway, logs a warning and shows a notification once; please [report](https://github.com/darkodemic/gpwebcam/issues) whether it works.
+
+Applications always see the camera as **GoPro**: the name is fixed when the module is loaded, and the device stays the same while you swap cameras. The model appears on the placeholder, in notifications and in the log. To use another name, set it in your own module configuration and tell gpwebcam:
+
+1. Copy `/usr/lib/modprobe.d/99-gpwebcam.conf` to `/etc/modprobe.d/99-gpwebcam.conf` and change `card_label="GoPro,OBS Virtual Camera"` to, for example, `card_label="GoPro HERO13 Black,OBS Virtual Camera"`.
+2. Add `-device-label "GoPro HERO13 Black"` to the service's command (see [Change resolution or field of view](#change-resolution-or-field-of-view)).
+3. Reboot.
 
 Logs and control:
 
@@ -136,7 +146,7 @@ The empty `ExecStart=` clears the packaged command before setting the new one. S
 | `-video-nr` | `-1` | Use `/dev/videoN` instead of finding the device by label. |
 | `-iface` | the only GoPro interface | GoPro network interface; needed only with several cameras. |
 | `-port` | `8554` | UDP port the camera streams to, from 1024 to 65535. |
-| `-hwdec` | `auto` | Hardware decoding: `auto` uses the GPU when it can, `none` always decodes on the CPU. |
+| `-hwdec` | `auto` | Hardware decoding: `auto` uses VAAPI when it works, `none` always decodes on the CPU. |
 | `-notify` | `true` | Desktop notifications; `-notify=false` turns them off. |
 | `-ffmpeg` | `ffmpeg` | ffmpeg executable. |
 | `-dhcp-wait` | `30s` | How long to wait for the camera to give the computer an address. |

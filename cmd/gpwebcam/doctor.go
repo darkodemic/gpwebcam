@@ -149,6 +149,11 @@ func checkFFmpeg(r *report, name string) {
 			"Fedora: install ffmpeg from RPM Fusion (sudo dnf swap ffmpeg-free ffmpeg --allowerasing),",
 			"or the openh264 library from the Cisco repository.")
 	}
+	if err := stream.ProbeVAAPI(context.Background(), path); err == nil {
+		r.ok("VAAPI hardware decoding works; -hwdec auto uses it")
+	} else {
+		r.ok("no VAAPI hardware decoding; gpwebcam decodes in software")
+	}
 }
 
 // h264Decoders returns the software H.264 decoders in `ffmpeg -decoders`
@@ -301,7 +306,12 @@ func checkCamera(r *report, f doctorFlags) {
 		return
 	}
 	for _, u := range usb {
-		r.ok("%s on USB (%s Mb/s)", u.product, u.speed)
+		if testedModels[u.product] {
+			r.ok("%s on USB (%s Mb/s)", u.product, u.speed)
+		} else {
+			r.warn(fmt.Sprintf("%s on USB (%s Mb/s) has not been tested with gpwebcam", u.product, u.speed),
+				"It may work; please report whether it does: https://github.com/darkodemic/gpwebcam/issues")
+		}
 	}
 
 	var ifaces []usbnet.Interface

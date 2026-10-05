@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -64,20 +65,19 @@ type server struct {
 	width  int
 	height int
 
-	mu     sync.Mutex
-	frames map[string][]byte // rendered placeholders by status line
+	render *placeholder.Renderer
 
-	// softwareOnly is set after GPU decoding gave no video twice in a row.
-	softwareOnly bool
+	mu       sync.Mutex
+	pictures map[string]*placeholder.Picture // by status line
+	reported map[string]bool                 // untested models already reported
+
+	// gpu is "vaapi" when -hwdec auto found a working VAAPI device at
+	// start; it becomes "none" after GPU decoding gave no video twice.
+	gpu string
 }
 
-// hwdec returns ffmpeg's -hwaccel value for the next session.
-func (s *server) hwdec() string {
-	if s.softwareOnly {
-		return "none"
-	}
-	return s.f.hwdec
-}
+// hwdec returns the stream.Config HWAccel value for the next session.
+func (s *server) hwdec() string { return s.gpu }
 
 // cmdServe implements both "run" (once false: wait for cameras forever) and
 // "start" (once true: one session, then exit).
@@ -131,15 +131,31 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		return err
 	}
 	defer out.Close()
-	s := &server{f: f, log: log, notify: notifier, feed: feed.New(out, idleInterval), width: w, height: h, frames: map[string][]byte{}}
+	gpu := "none"
+	if f.hwdec == "auto" {
+		if err := stream.ProbeVAAPI(ctx, f.ffmpeg); err == nil {
+			gpu = "vaapi"
+		} else {
+			log.Info("hardware decoding is not available, decoding in software", "err", err)
+		}
+	}
+	render, err := placeholder.NewRenderer(ctx, f.ffmpeg, w, h)
+	if err != nil {
+		log.Warn("render placeholder, using a plain frame", "err", err)
+	}
+	s := &server{
+		f: f, log: log, notify: notifier, feed: feed.New(out, idleInterval), width: w, height: h,
+		render: render, pictures: map[string]*placeholder.Picture{}, reported: map[string]bool{},
+		gpu: gpu,
+	}
 	go s.feed.Run(ctx)
 	log.Info("feeding loopback device", "device", device, "size", fmt.Sprintf("%dx%d", w, h))
-	for _, st := range placeholder.All {
-		s.placeholder(ctx, st)
+	for _, st := range []string{placeholder.NotConnected, placeholder.NoVideo, placeholder.NotAnswering, placeholder.Problem} {
+		s.picture(ctx, st, false)
 	}
 
 	if once {
-		s.show(ctx, placeholder.WaitingNetwork)
+		s.showMoving(ctx, placeholder.WaitingNetwork(modelName(iface)))
 		return interrupted(ctx, s.session(ctx, iface), log)
 	}
 	s.show(ctx, placeholder.NotConnected)
@@ -149,7 +165,8 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		if err != nil {
 			return interrupted(ctx, err, log)
 		}
-		s.show(ctx, placeholder.WaitingNetwork)
+		s.reportModel(iface)
+		s.showMoving(ctx, placeholder.WaitingNetwork(modelName(iface)))
 		err = s.session(ctx, iface)
 		switch {
 		case ctx.Err() != nil:
@@ -162,7 +179,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 			log.Info("camera unplugged", "iface", iface.Name)
 			noVideo = 0
 			s.show(ctx, placeholder.NotConnected)
-			s.notify.Send(notify.Low, "GoPro disconnected", "The webcam shows a placeholder until the camera is back.")
+			s.notify.Send(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
 			continue
 		}
 		log.Warn("session ended", "iface", iface.Name, "err", err)
@@ -171,11 +188,11 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		} else {
 			noVideo = 0
 		}
-		if noVideo >= 2 && s.hwdec() == "auto" {
+		if noVideo >= 2 && s.gpu != "none" {
 			// A GPU decoder that initialises but yields nothing would
 			// otherwise fail every session; software decoding always works.
 			log.Warn("no video twice with hardware decoding, using software decoding from now on")
-			s.softwareOnly = true
+			s.gpu = "none"
 		}
 		if _, lerr := net.InterfaceByName(iface.Name); lerr != nil {
 			s.show(ctx, placeholder.NotConnected)
@@ -183,16 +200,21 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		// Still connected: the camera refused or stalled. Say why on the
 		// picture and retry later rather than hammer it.
-		status := retryStatus(err, noVideo)
-		s.show(ctx, status)
+		model := modelName(iface)
+		status := retryStatus(err, noVideo, model)
+		if status == placeholder.Retrying(model) {
+			s.showMoving(ctx, status)
+		} else {
+			s.show(ctx, status)
+		}
 		switch status {
 		case placeholder.NoVideo:
-			s.notify.Send(notify.Normal, "GoPro sends no video",
+			s.notify.Send(notify.Normal, model+" sends no video",
 				fmt.Sprintf("Is a firewall blocking UDP port %d? See: journalctl --user -u gpwebcam", f.port))
 		case placeholder.NotAnswering:
-			s.notify.Send(notify.Normal, "GoPro does not answer", "Unplug and replug the USB cable.")
+			s.notify.Send(notify.Normal, model+" does not answer", "Unplug and replug the USB cable.")
 		case placeholder.Problem:
-			s.notify.Send(notify.Normal, "GoPro problem", "gpwebcam keeps retrying. See: journalctl --user -u gpwebcam")
+			s.notify.Send(notify.Normal, model+" problem", "gpwebcam keeps retrying. See: journalctl --user -u gpwebcam")
 		}
 		if !sleep(ctx, retryDelay) {
 			log.Info("stopped on signal")
@@ -203,12 +225,12 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 
 // retryStatus picks the placeholder line for a session that failed while
 // the camera stayed connected.
-func retryStatus(err error, noVideo int) string {
+func retryStatus(err error, noVideo int, model string) string {
 	switch {
 	case errors.Is(err, stream.ErrNoVideo) && noVideo >= noVideoHint:
 		return placeholder.NoVideo
 	case errors.Is(err, stream.ErrNoVideo):
-		return placeholder.Retrying
+		return placeholder.Retrying(model)
 	case errors.Is(err, camera.ErrNoAnswer):
 		return placeholder.NotAnswering
 	default:
@@ -277,27 +299,69 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 	}
 }
 
-// placeholder returns the frame for a status line, rendering it once.
-func (s *server) placeholder(ctx context.Context, status string) []byte {
+// picture returns the placeholder for a status line, rendering it once.
+func (s *server) picture(ctx context.Context, status string, animate bool) *placeholder.Picture {
+	key := fmt.Sprintf("%t %s", animate, status)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if frame, ok := s.frames[status]; ok {
-		return frame
+	if p, ok := s.pictures[key]; ok {
+		return p
 	}
-	frame, err := placeholder.Render(ctx, s.f.ffmpeg, s.width, s.height, status)
+	p, err := s.render.Picture(ctx, status, animate)
 	if err != nil {
-		s.log.Warn("render placeholder, using a blank frame", "err", err)
-		frame = placeholder.Blank(s.width, s.height)
+		s.log.Warn("render placeholder", "status", status, "err", err)
 	}
-	s.frames[status] = frame
-	return frame
+	s.pictures[key] = p
+	return p
 }
 
-// show switches the device to the placeholder with the given status line.
-func (s *server) show(ctx context.Context, status string) {
-	if err := s.feed.Idle(s.placeholder(ctx, status)); err != nil {
+// show switches the device to a still placeholder with the given status.
+func (s *server) show(ctx context.Context, status string) { s.showPicture(ctx, status, false) }
+
+// showMoving shows a status that waits for something, with moving dots.
+func (s *server) showMoving(ctx context.Context, status string) { s.showPicture(ctx, status, true) }
+
+func (s *server) showPicture(ctx context.Context, status string, animate bool) {
+	if err := s.feed.Idle(s.picture(ctx, status, animate)); err != nil {
 		s.log.Warn("write placeholder", "err", err)
 	}
+}
+
+// testedModels are the cameras gpwebcam has been tested with, by USB
+// product string.
+var testedModels = map[string]bool{"HERO13 Black": true}
+
+// modelName is the camera's name for people: "GoPro " and the USB product
+// string, cleaned because it comes from the device.
+func modelName(iface usbnet.Interface) string {
+	p := placeholder.Clean(iface.Product)
+	switch {
+	case p == "":
+		return "GoPro"
+	case strings.HasPrefix(strings.ToLower(p), "gopro"):
+		return p
+	default:
+		return "GoPro " + p
+	}
+}
+
+// reportModel logs and notifies, once per model, that a camera has not
+// been tested, so its users know to report how it works.
+func (s *server) reportModel(iface usbnet.Interface) {
+	if testedModels[iface.Product] {
+		return
+	}
+	s.mu.Lock()
+	seen := s.reported[iface.Product]
+	s.reported[iface.Product] = true
+	s.mu.Unlock()
+	if seen {
+		return
+	}
+	s.log.Warn("this camera model has not been tested with gpwebcam; please report whether it works",
+		"model", modelName(iface), "tested", "HERO13 Black")
+	s.notify.Send(notify.Normal, modelName(iface)+" has not been tested",
+		"gpwebcam will try it. Please report whether it works: https://github.com/darkodemic/gpwebcam/issues")
 }
 
 // session streams one camera into the device until the stream ends, the
@@ -327,7 +391,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		return err
 	}
 	log.Info("link is up", "iface", iface.Name, "host", host, "camera", camAddr)
-	s.show(ctx, placeholder.Starting)
+	s.showMoving(ctx, placeholder.Starting(modelName(iface)))
 
 	cam := camera.NewClient(netip.AddrPortFrom(camAddr, camera.HTTPPort), host.Addr(), f.httpTimeout)
 	err = cam.StartWebcam(ctx, camera.StartOptions{
@@ -382,7 +446,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		}
 		videoFlowing.Do(func() {
 			log.Info("video is flowing")
-			s.notify.Send(notify.Low, "GoPro connected",
+			s.notify.Send(notify.Low, modelName(iface)+" connected",
 				fmt.Sprintf("Streaming %sp with the %s field of view.", f.res, f.fov))
 		})
 		return s.feed.Live(frame)

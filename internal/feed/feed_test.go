@@ -38,7 +38,7 @@ func TestFeed(t *testing.T) {
 	defer cancel()
 	go f.Run(ctx)
 
-	if err := f.Idle([]byte("idle")); err != nil {
+	if err := f.Idle(Still("idle")); err != nil {
 		t.Fatal(err)
 	}
 	if rec.count("idle") != 1 {
@@ -59,9 +59,32 @@ func TestFeed(t *testing.T) {
 		t.Error("live frame not written")
 	}
 
-	f.Idle([]byte("idle"))
+	f.Idle(Still("idle"))
 	time.Sleep(50 * time.Millisecond)
 	if n := rec.count("idle"); n < before+3 {
 		t.Errorf("idle repeats did not resume")
+	}
+}
+
+// steps is an animated Source: "a" for the first 20 ms, then "b".
+type steps struct{}
+
+func (steps) Frame(elapsed time.Duration) []byte {
+	if elapsed < 20*time.Millisecond {
+		return []byte("a")
+	}
+	return []byte("b")
+}
+
+func TestFeedAnimates(t *testing.T) {
+	rec := &recorder{}
+	f := New(rec, 5*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.Run(ctx)
+	f.Idle(steps{})
+	time.Sleep(60 * time.Millisecond)
+	if rec.count("a") == 0 || rec.count("b") == 0 {
+		t.Errorf("animation steps written: a=%d b=%d", rec.count("a"), rec.count("b"))
 	}
 }

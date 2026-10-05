@@ -23,7 +23,9 @@ V4L2 applications use as a camera named
 It runs as the logged-in user and needs no root.
 .PP
 While no camera sends video, gpwebcam writes a placeholder picture that
-says why, so applications keep listing the camera.
+says why and names the camera model, so applications keep listing the
+camera. Applications see the device by its label, GoPro by default; the
+label is fixed when the module is loaded.
 .SH COMMANDS
 .TP
 .B run
@@ -76,9 +78,10 @@ UDP port the camera streams to, 1024 to 65535. Default 8554.
 ffmpeg executable. Default ffmpeg from PATH.
 .TP
 .BI \-hwdec " auto|none"
-Hardware decoding. auto decodes on the GPU when ffmpeg can use one and
-falls back to the CPU otherwise; after two sessions in a row without video
-it switches to the CPU for good. none always decodes on the CPU. Default auto.
+Hardware decoding. auto decodes on the GPU through VAAPI when ffmpeg can
+open a VAAPI device at start, and on the CPU otherwise; after two sessions
+in a row without video it switches to the CPU for good. none always decodes
+on the CPU. Default auto.
 .TP
 .BI \-notify= bool
 Show desktop notifications through notify-send. Default true.

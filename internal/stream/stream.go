@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -34,9 +35,9 @@ type Config struct {
 	// ffmpeg reads several times, so with no stream at all it gives up
 	// after about four timeouts (measured with ffmpeg 9.0.2).
 	ReadTimeout time.Duration
-	// HWAccel is ffmpeg's -hwaccel value: "auto" decodes on the GPU when
-	// one is usable and falls back to software otherwise; "" or "none"
-	// always decodes in software.
+	// HWAccel is "vaapi" to decode on the GPU through VAAPI, or "" or
+	// "none" to decode in software. ffmpeg does not fall back by itself
+	// when VAAPI fails to start, so check it first with ProbeVAAPI.
 	HWAccel string
 	// FirstFrame, when positive, ends the run with ErrNoVideo if no frame
 	// arrives this long after ffmpeg starts. It catches a camera that
@@ -65,9 +66,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("ffmpeg path must be set")
 	}
 	switch c.HWAccel {
-	case "", "none", "auto":
+	case "", "none", "vaapi":
 	default:
-		return fmt.Errorf("hardware decoding %q: must be auto or none", c.HWAccel)
+		return fmt.Errorf("hardware decoding %q: must be vaapi or none", c.HWAccel)
 	}
 	return nil
 }
@@ -83,10 +84,12 @@ func (c Config) Args() []string {
 	url := fmt.Sprintf("udp://%s?timeout=%d&overrun_nonfatal=1",
 		c.Listen, c.ReadTimeout.Microseconds())
 	var hw []string
-	if c.HWAccel == "auto" {
-		// Measured 2026-10-05 on an AMD GPU (VAAPI), 1080p30 H.264: 8.7 %
-		// of one core instead of 13.7 %, latency 74 ms instead of 71 ms.
-		hw = []string{"-hwaccel", "auto"}
+	if c.HWAccel == "vaapi" {
+		// Measured 2026-10-05 on an AMD GPU, 1080p30 H.264: 9.5 % of one
+		// core instead of 13.7 %, latency 74 ms instead of 71 ms. Not
+		// "-hwaccel auto": it tries CUDA first and logs errors on every
+		// start where there is no NVIDIA driver.
+		hw = []string{"-hwaccel", "vaapi"}
 	}
 	return append([]string{
 		"-hide_banner",
@@ -198,6 +201,20 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	}
 	// With UDP input ffmpeg ends cleanly only when the read timeout fires.
 	return fmt.Errorf("no video from the camera for %v; was it unplugged or switched off?", c.ReadTimeout)
+}
+
+// ProbeVAAPI reports whether ffmpeg can open a VAAPI device, by creating
+// one for an empty input. It takes about 50 ms.
+func ProbeVAAPI(ctx context.Context, ffmpeg string) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+		"-init_hw_device", "vaapi=va", "-f", "lavfi", "-i", "nullsrc=s=64x64",
+		"-frames:v", "1", "-f", "null", "-").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("VAAPI: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // Port parses and range-checks a UDP port given as text.
