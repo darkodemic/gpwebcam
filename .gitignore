@@ -1,3 +1,4 @@
 /gpwebcam
 /dist/
+/.worktrees/
 /packaging/man/*.gz

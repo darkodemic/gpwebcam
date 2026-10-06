@@ -93,4 +93,5 @@ Darko, 2026-10-06:
 
 - Ispravke posle probe: nepoznat ključ u `settings.json` više ne obara ceo fajl, nego se prijavi kao upozorenje (`UnknownKeysError`), a `Save` ga zadrži; inače bi stariji build fajl sa ključem `camera` odbacio i vratio podrazumevane vrednosti (tako bi se ponašao build `dbde29f` instaliran 2026-10-06). Režim off ima svoj razlog prekida (`errOff`) i poruku u logu; "found camera" se upisuje samo pri priključenju i preimenovanju interfejsa.
 - Usput 2026-10-06: lokalne provere "na Go 1.22" kroz `mise exec go@1.22` u ovoj sesiji nisu bile na 1.22, jer je shell izvozio `GOROOT` za 1.27.1, pa je Go prešao na 1.27.1. Prava provera: `mise exec go@1.22 -- env -u GOROOT -u GOBIN GOTOOLCHAIN=local GOWORK=off go test ./...`. CI koristi pravi Go 1.22 i bio je zelen.
-- Sledeće: commit, pa proba sa Zoom-om i restart iz menija sa paketom; zatim §3.4 (rezolucija bez restarta).
+- 2026-10-06: commit `ee8ee18`, CI zelen. Darko instalirao paket napravljen iz `ee8ee18` (worktree bez `go.work`, sa čekboksovima) i probao sa Zoom-om, meni Camera i restart iz menija: "sve lepo radi".
+- Sledeće: §3.4 (rezolucija bez restarta), pa presek 2 iz `tray-and-recording.md`.
