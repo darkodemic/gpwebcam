@@ -64,7 +64,7 @@ Samo meni, bez prozora: prozor traži GUI biblioteku, a to je mnogo veća zavisn
 - Notifikacije (čekboks)
 - Sakrij ikonicu
 
-Ikonica pokazuje stanje: siva bez kamere, obična dok stream radi, sa crvenom tačkom dok snima.
+Ikonica pokazuje stanje. Po Darkovoj želji od 2026-10-06 (`camera-on-demand.md` §4): bela dok video teče, narandžasta kad ima problem, izbledela bela inače; dok snima, dobija crvenu tačku.
 
 ### 3.4 Gašenje ikonice
 
@@ -175,4 +175,7 @@ Uz svaki presek: README, man stranica, `doctor` (tray host, folder za snimke) i 
   - `camera.ErrCannotCapture` za error 4, i kad stigne kao HTTP 500 sa JSON telom (HERO13). `StartWebcam` šalje START do 3 puta, 1 s razmaka, dok kamera vraća error 4; posle toga sesija se završava, zamenska slika kaže "Camera cannot start. Is its battery in and charged?", a notifikacija predlaže proveru baterije i gašenje kamere. Da li ponovljeni START pomaže u slučaju sa baterijom, nije provereno, jer se ne može namerno izazvati; test sa lažnom kamerom pokriva oba ishoda.
   - Test za zamensku sliku sada proverava da svaka poruka staje u sliku. Prvi pokušaj (`leftmost <= 0`) ne bi ništa uhvatio: red od 120 znakova počinje u koloni 3, jer ffmpeg odseca slova na ivici; sada se traži margina od 1/20 širine. Nova poruka počinje na 131 px od 640, "Camera not answering…" na 122.
 - 2026-10-06, ispravka (1) uživo: ffmpeg čitač (`-f v4l2 -i /dev/video42`) drži uređaj u 720p; servis zaustavljen, čitač ostaje; build iz radnog stabla sa `-res 1080` upiše "an application keeps the device at its size" (`size=1280x720 wanted=1920x1080`), uređaj ostaje `YU12:1280x720`, kamera krene u 720p i video teče za 4.2 s. Usput: ffmpeg čitač kome je pisac nestao ne reaguje na SIGTERM, tek na SIGKILL; zbog toga je kamera u probi stajala oko 2 min.
-- Sledeće: commit ispravki, pa presek 2.
+- 2026-10-06: commit `301bf30`, CI zelen.
+- 2026-10-06: Darko pitao za restart iz menija i kameru koja radi samo kad je aplikacija traži; predlog je `camera-on-demand.md`. Ikonica promenjena: bela, narandžasta i izbledela bela umesto sive, plave i narandžaste.
+- 2026-10-06: Darko odlučio da rad na zahtev (`camera-on-demand.md`) ide pre preseka 2.
+- Sledeće: rad na zahtev, pa presek 2.

@@ -102,7 +102,7 @@ It checks ffmpeg, the module and the device, the service, the settings, the came
 
 ### Tray icon
 
-While the service runs, a camera icon in the system tray shows the state: gray while no camera is connected or the camera is starting, blue while video flows, amber when the camera has a problem. Its menu has:
+While the service runs, a camera icon in the system tray shows the state: white while video flows, orange when the camera has a problem, and faded while there is no video for another reason, such as no camera connected or the camera starting. Its menu has:
 
 - the camera's state, for example "GoPro HERO13 Black: 1080p, linear";
 - **Field of view**: Wide, Narrow, SuperView or Linear. The camera restarts with the new one, which takes about 4 seconds; applications keep the camera open meanwhile.

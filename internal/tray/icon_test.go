@@ -8,8 +8,12 @@ import (
 )
 
 func TestIcon(t *testing.T) {
-	seen := map[color.NRGBA]State{}
-	for _, st := range []State{Off, Live, Trouble} {
+	want := map[State]color.NRGBA{
+		Live:    {0xff, 0xff, 0xff, 0xff},
+		Trouble: {0xf2, 0xa3, 0x3a, 0xff},
+		Off:     {0xff, 0xff, 0xff, 0x73}, // white at 45 %
+	}
+	for st, body := range want {
 		img, err := png.Decode(bytes.NewReader(Icon(st)))
 		if err != nil {
 			t.Fatalf("state %d: %v", st, err)
@@ -23,16 +27,14 @@ func TestIcon(t *testing.T) {
 		if c := at(0, 0); c.A != 0 {
 			t.Errorf("state %d: corner is not transparent: %v", st, c)
 		}
-		if c := at(36, 32); c != lensInner {
-			t.Errorf("state %d: lens centre %v, want %v", st, c, lensInner)
+		if c := at(8, 40); c != body {
+			t.Errorf("state %d: body %v, want %v", st, c, body)
 		}
-		body := at(8, 40)
-		if body != bodyColors[st] {
-			t.Errorf("state %d: body %v, want %v", st, body, bodyColors[st])
+		if c := at(36, 32); c.R != lensInner.R || c.A != body.A {
+			t.Errorf("state %d: lens center %v, want %v at the body's opacity", st, c, lensInner)
 		}
-		if other, dup := seen[body]; dup {
-			t.Errorf("states %d and %d look the same", other, st)
+		if c := at(2, 32); c.A == 0 || c.R > 0x10 {
+			t.Errorf("state %d: no dark outline at the left edge: %v", st, c)
 		}
-		seen[body] = st
 	}
 }
