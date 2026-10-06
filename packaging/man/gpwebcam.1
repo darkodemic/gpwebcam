@@ -1,4 +1,4 @@
-.TH GPWEBCAM 1 "2026-10-06" "gpwebcam" "User Commands"
+.TH GPWEBCAM 1 "2026-10-07" "gpwebcam" "User Commands"
 .SH NAME
 gpwebcam \- use a GoPro connected over USB as a Linux webcam
 .SH SYNOPSIS
@@ -10,6 +10,11 @@ gpwebcam \- use a GoPro connected over USB as a Linux webcam
 .br
 .B gpwebcam config
 .RI [ setting " [" value ]]
+.br
+.B gpwebcam record
+.RB [ start | stop ]
+.br
+.B gpwebcam launch
 .br
 .B gpwebcam doctor
 .RI [ options ]
@@ -69,6 +74,21 @@ with a value too, change it. The settings are
 .B tray
 (on, off). The tray menu changes the same file.
 .TP
+.BR record " [" start | stop ]
+Start or stop a recording in the running
+.BR "gpwebcam run" ,
+as the tray menu does; without an argument, say whether it records. The
+camera's video goes as it is, without decoding, into a Matroska file in
+~/Videos/gpwebcam, named by its start time. While recording, the camera
+streams even when no application uses it; unplugging it or turning the
+camera mode off ends the recording.
+.TP
+.B launch
+Start the user service gpwebcam.service, as
+.B systemctl \-\-user start gpwebcam
+does, and say in a notification whether it started or was running
+already. The GoPro Webcam entry in the application menu runs it.
+.TP
 .B doctor
 Check ffmpeg, the v4l2loopback module and device, the service, the
 settings, the camera's connection, the firewall and the system tray, and
@@ -85,7 +105,8 @@ Print the version.
 and
 .B start
 take these options, except
-.B \-camera
+.BR \-camera ,
+.B \-record\-dir
 and
 .BR \-tray ,
 which only
@@ -130,6 +151,11 @@ Show desktop notifications through notify-send. Default true.
 .BI \-tray= bool
 Show the tray icon. Default true.
 .TP
+.BI \-record\-dir " folder"
+Folder for recordings, an absolute path. Default ~/Videos/gpwebcam. The
+packaged unit lets the service write to ~/Videos only; another folder also
+needs ReadWritePaths in a drop-in for the unit.
+.TP
 .BI \-camera " demand|always|off"
 When the camera streams: while an application uses the device, whenever it
 is connected, or never. Only for
@@ -163,6 +189,17 @@ The settings, written by the tray menu and
 .BR "gpwebcam config" ;
 .I $XDG_CONFIG_HOME/gpwebcam
 when XDG_CONFIG_HOME is set.
+.TP
+.I /usr/share/applications/gpwebcam.desktop
+The GoPro Webcam entry in the application menu.
+.TP
+.I ~/Videos/gpwebcam
+Recordings.
+.TP
+.I $XDG_RUNTIME_DIR/gpwebcam/control.sock
+The socket through which
+.B gpwebcam record
+talks to the running service; only the user can open it.
 .SH EXIT STATUS
 0 on success or when stopped by SIGINT or SIGTERM, 1 on an error or when a
 .B doctor

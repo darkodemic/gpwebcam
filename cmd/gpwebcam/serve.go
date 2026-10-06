@@ -20,6 +20,7 @@ import (
 	"github.com/darkodemic/gpwebcam/internal/feed"
 	"github.com/darkodemic/gpwebcam/internal/notify"
 	"github.com/darkodemic/gpwebcam/internal/placeholder"
+	"github.com/darkodemic/gpwebcam/internal/record"
 	"github.com/darkodemic/gpwebcam/internal/settings"
 	"github.com/darkodemic/gpwebcam/internal/stream"
 	"github.com/darkodemic/gpwebcam/internal/tray"
@@ -105,8 +106,25 @@ type server struct {
 	// usageOK is set while v4l2loopback reports applications streaming
 	// from the device, and used while one does (camera mode demand).
 	usageOK, used atomic.Bool
+	// present is set while a camera is connected.
+	present atomic.Bool
+
+	// Recording: recWant while the user wants it, since recSince; recLive
+	// while a session streams; rec is the file being written, if any, and
+	// recPacket the same for the datagram path, without the lock.
+	recDir    string
+	recMu     sync.Mutex
+	recWant   bool
+	recLive   bool
+	recSince  time.Time
+	recErr    error // why the last recording stopped by itself
+	rec       *record.Recorder
+	recPacket atomic.Pointer[record.Recorder]
+	lastSaved savedRecording
 	// wake tells idle to look at wantCamera again.
 	wake chan struct{}
+	// quit ends gpwebcam run as a signal does.
+	quit func()
 }
 
 // hwaccel picks the stream.Config HWAccel value for the next session.
@@ -218,7 +236,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		f: f, log: log, live: lv, notify: notifier, feed: feed.New(out, idleInterval), once: once,
 		device: device, out: out, res: res, width: w, height: h,
 		render: render, pictures: map[string]*placeholder.Picture{}, reported: map[string]bool{},
-		wake: make(chan struct{}, 1),
+		wake: make(chan struct{}, 1), recDir: f.recordDir, quit: stop,
 	}
 	defer func() {
 		s.mu.Lock()
@@ -235,6 +253,8 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 			"An application has the camera open. The new resolution applies once no application uses the camera.")
 	}
 	if !once {
+		go serveControl(ctx, s, log)
+		go s.refreshWhileRecording(ctx)
 		s.watchUsage(ctx, device)
 		lv.changed = s.settingsChanged
 		go lv.watch(ctx)
@@ -262,6 +282,12 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	unplugged := func(iface usbnet.Interface) {
 		log.Info("camera unplugged", "iface", iface.Name)
 		noVideo, present = 0, false
+		s.present.Store(false)
+		// The session already saved the recording; a camera that comes
+		// back does not record again by itself.
+		s.recMu.Lock()
+		s.recWant = false
+		s.recMu.Unlock()
 		s.show(ctx, placeholder.NotConnected)
 		s.note(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
 	}
@@ -276,6 +302,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		if !present {
 			present = true
+			s.present.Store(true)
 			s.reportModel(iface)
 			s.noteConnected(iface)
 		}
@@ -660,6 +687,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 		}
 	})
 	defer restart.Stop()
+	defer s.setRecLive(false)
 	err = stream.Run(ctx, stream.Config{
 		FFmpeg:      f.ffmpeg,
 		Listen:      netip.AddrPortFrom(host.Addr(), f.port),
@@ -669,6 +697,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 		ReadTimeout: 5 * time.Second,
 		FirstFrame:  firstFrame,
 		HWAccel:     hw,
+		OnPacket:    s.recPacketTo,
 		OnStats: func(st stream.Stats) {
 			if st.Dropped > 0 || st.Foreign > 0 {
 				log.Warn("datagrams lost or ignored", "received", st.Packets, "dropped", st.Dropped, "from_elsewhere", st.Foreign)
@@ -682,6 +711,9 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 			gotVideo.Store(true)
 			log.Info("video is flowing")
 			s.setStatus(tray.Live, fmt.Sprintf("%s: %sp, %s", modelName(iface), res, fov))
+			// A recording starts with the video, so that a session that
+			// never shows any leaves no file behind.
+			s.setRecLive(true)
 		})
 		return s.feed.Live(frame)
 	})

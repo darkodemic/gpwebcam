@@ -5,6 +5,7 @@
 package tray
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -25,10 +26,16 @@ type View struct {
 	// disabled.
 	Locked map[string]bool
 	// ResPending is set when the saved resolution differs from the one in
-	// use; it changes only when gpwebcam restarts.
+	// use; it changes once no application uses the camera.
 	ResPending bool
 	// CanRestart shows the restart item; gpwebcam runs under systemd.
 	CanRestart bool
+	// CanRecord enables the record item: a camera is connected and its mode
+	// is not off.
+	CanRecord bool
+	// Recording is set while a recording runs, since RecordingSince.
+	Recording      bool
+	RecordingSince time.Time
 }
 
 // Actions are called from the tray's goroutine when the user picks an item.
@@ -37,6 +44,12 @@ type Actions struct {
 	Set func(key, value string)
 	// Restart restarts gpwebcam.
 	Restart func()
+	// Record starts or stops a recording.
+	Record func(on bool)
+	// OpenRecordings shows the recordings folder in the file manager.
+	OpenRecordings func()
+	// Quit stops gpwebcam.
+	Quit func()
 }
 
 // Tray is the icon and its menu. fyne.io/systray keeps global state, so a
@@ -85,7 +98,8 @@ func (t *Tray) Stop() {
 }
 
 // click is a menu item's setting and the value picking it sets; an empty
-// value flips an on/off setting. The key "restart" restarts gpwebcam.
+// value flips an on/off setting. The keys "restart", "record",
+// "recordings" and "quit" are actions, not settings.
 type click struct{ key, value string }
 
 // toggle returns the opposite of an on/off setting.
@@ -108,6 +122,8 @@ func toggle(key string, s settings.Settings) string {
 // items are the menu entries that change with the view.
 type items struct {
 	status     *systray.MenuItem
+	record     *systray.MenuItem
+	recordings *systray.MenuItem
 	camera     *systray.MenuItem
 	cameras    map[string]*systray.MenuItem
 	fov        *systray.MenuItem
@@ -119,6 +135,7 @@ type items struct {
 	notify     *systray.MenuItem
 	restart    *systray.MenuItem
 	hide       *systray.MenuItem
+	quit       *systray.MenuItem
 }
 
 var (
@@ -168,6 +185,11 @@ func (t *Tray) run() {
 	it.status = systray.AddMenuItem("", "")
 	it.status.Disable()
 	systray.AddSeparator()
+	it.record = systray.AddMenuItem("Record", "Copy the camera's video into a file")
+	forward(it.record, func() click { return click{key: "record"} })
+	it.recordings = systray.AddMenuItem("Open recordings folder", "")
+	forward(it.recordings, func() click { return click{key: "recordings"} })
+	systray.AddSeparator()
 	it.camera = systray.AddMenuItem("Camera", "When the GoPro streams")
 	it.cameras = map[string]*systray.MenuItem{}
 	for _, m := range cameraOrder {
@@ -197,23 +219,35 @@ func (t *Tray) run() {
 	forward(it.restart, func() click { return click{key: "restart"} })
 	it.hide = systray.AddMenuItem("Hide icon", "Bring it back with: gpwebcam config tray on")
 	forward(it.hide, func() click { return click{"tray", "off"} })
+	it.quit = systray.AddMenuItem("Quit gpwebcam", "Stop the service until the next login or GoPro Webcam in the application menu")
+	forward(it.quit, func() click { return click{key: "quit"} })
 
-	shown := State(-1)
+	shown, shownRec := State(-1), false
 	for {
 		t.mu.Lock()
 		v := t.latest
 		t.mu.Unlock()
-		if v.State != shown {
-			systray.SetIcon(Icon(v.State))
-			shown = v.State
+		if v.State != shown || v.Recording != shownRec {
+			systray.SetIcon(Icon(v.State, v.Recording))
+			shown, shownRec = v.State, v.Recording
 		}
 		it.show(v)
 
 		select {
 		case <-t.kick:
 		case c := <-clicks:
-			if c.key == "restart" {
+			switch c.key {
+			case "restart":
 				t.act.Restart()
+				continue
+			case "record":
+				t.act.Record(!v.Recording)
+				continue
+			case "recordings":
+				t.act.OpenRecordings()
+				continue
+			case "quit":
+				t.act.Quit()
 				continue
 			}
 			if c.value == "" {
@@ -234,6 +268,18 @@ func (it *items) show(v View) {
 	}
 	it.status.SetTitle(status)
 	systray.SetTooltip("gpwebcam: " + status)
+
+	if v.Recording {
+		it.record.SetTitle("Stop recording (" + Clock(time.Since(v.RecordingSince)) + ")")
+		it.record.Enable()
+	} else {
+		it.record.SetTitle("Record")
+		if v.CanRecord {
+			it.record.Enable()
+		} else {
+			it.record.Disable()
+		}
+	}
 
 	for m, item := range it.cameras {
 		check(item, v.Settings.Camera == m)
@@ -262,6 +308,15 @@ func (it *items) show(v View) {
 		it.restart.Hide()
 	}
 	lock(it.hide, "Hide icon", v.Locked["tray"])
+}
+
+// Clock formats a duration as m:ss, or h:mm:ss from an hour on.
+func Clock(d time.Duration) string {
+	s := int(d.Round(time.Second) / time.Second)
+	if s >= 3600 {
+		return fmt.Sprintf("%d:%02d:%02d", s/3600, s/60%60, s%60)
+	}
+	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
 func check(item *systray.MenuItem, on bool) {

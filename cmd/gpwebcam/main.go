@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,6 +31,8 @@ commands:
             is connected, a placeholder picture otherwise (service mode)
   start     stream one camera session, then exit
   config    show or change the settings, as the tray menu does
+  record    start or stop a recording in the running service
+  launch    start the user service, as the application menu entry does
   doctor    check the setup and say what to fix
   list      list GoPro network interfaces
   version   print the version
@@ -59,6 +62,10 @@ func run(args []string, stdout io.Writer, log *slog.Logger) error {
 		return cmdServe(args[1:], log, true)
 	case "config":
 		return cmdConfig(args[1:], stdout)
+	case "record":
+		return cmdRecord(args[1:], stdout)
+	case "launch":
+		return cmdLaunch(args[1:], stdout)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout)
 	case "list":
@@ -105,6 +112,7 @@ type startFlags struct {
 	hwdec       string
 	tray        bool
 	camera      string
+	recordDir   string
 	ffmpeg      string
 	dhcpWait    time.Duration
 	connectWait time.Duration
@@ -138,6 +146,7 @@ func parseStart(name string, args []string) (startFlags, error) {
 	if name == "run" {
 		fs.BoolVar(&f.tray, "tray", d.Tray, "show the tray icon (overrides the settings file)")
 		fs.StringVar(&f.camera, "camera", d.Camera, "when the camera streams: demand (while an application uses it), always or off (overrides the settings file)")
+		fs.StringVar(&f.recordDir, "record-dir", "", "folder for recordings, an absolute path (default ~/Videos/gpwebcam); the service needs ReadWritePaths for it")
 	}
 	fs.StringVar(&f.ffmpeg, "ffmpeg", "ffmpeg", "ffmpeg executable")
 	fs.DurationVar(&f.dhcpWait, "dhcp-wait", 30*time.Second, "how long to wait for an IPv4 address on the interface")
@@ -167,6 +176,17 @@ func parseStart(name string, args []string) (startFlags, error) {
 		if err := probe.Set("camera", f.camera); err != nil {
 			return f, fmt.Errorf("-%w", err)
 		}
+		if f.recordDir == "" {
+			dir, err := defaultRecordDir()
+			if err != nil {
+				return f, fmt.Errorf("recordings folder: %w", err)
+			}
+			f.recordDir = dir
+		}
+		if !filepath.IsAbs(f.recordDir) {
+			return f, fmt.Errorf("-record-dir %q: must be an absolute path", f.recordDir)
+		}
+		f.recordDir = filepath.Clean(f.recordDir)
 	}
 	if f.hwdec != "auto" && f.hwdec != "none" {
 		return f, fmt.Errorf("-hwdec %q: must be auto or none", f.hwdec)

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=GoPro Webcam
+GenericName=Webcam
+Comment=Use a GoPro connected over USB as a webcam
+Exec=gpwebcam launch
+Icon=camera-web
+Terminal=false
+StartupNotify=false
+Categories=AudioVideo;Video;
+Keywords=gopro;webcam;camera;gpwebcam;

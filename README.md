@@ -4,7 +4,7 @@
 
 It runs as a systemd user service without root. The service waits for the camera, starts its webcam mode when you plug it in, and shows a "Camera not connected" picture while it is unplugged, so applications keep listing the camera. In our measurements the delay from scene to the Zoom preview is about 0.2 seconds.
 
-**Status:** early, no release yet. It is tested with a HERO13 Black, firmware 02.10 (`H24.01.02.10.00`), on Arch Linux, at 1080p and 30 fps. The `.deb` and `.rpm` packages install, run and uninstall cleanly on Debian 13, Ubuntu 24.04 and Fedora 44, but have not been tried there with a camera yet. Dedicated recording mode is not implemented yet.
+**Status:** early, no release yet. It is tested with a HERO13 Black, firmware 02.10 (`H24.01.02.10.00`), on Arch Linux, at 1080p and 30 fps. The `.deb` and `.rpm` packages install, run and uninstall cleanly on Debian 13, Ubuntu 24.04 and Fedora 44, but have not been tried there with a camera yet.
 
 Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -75,6 +75,7 @@ systemctl --user enable --now gpwebcam.service
 
 - `enable` starts it at every login, and `--now` starts it right away.
 - From then on, the **GoPro** camera is always available to applications. Without a camera it shows the "Camera not connected" picture.
+- **GoPro Webcam** in the application menu starts the service too, for example after **Quit gpwebcam** in the tray menu. It runs `gpwebcam launch` and says in a notification whether the service started or was running already.
 
 ### 4. Prepare the camera
 
@@ -102,17 +103,44 @@ It checks ffmpeg, the module and the device, the service, the settings, the came
 
 ### Tray icon
 
-While the service runs, a camera icon in the system tray shows the state: white while video flows, orange when the camera has a problem, and faded while there is no video for another reason, such as no camera connected or the camera starting. Its menu has:
+While the service runs, a camera icon in the system tray shows the state: white while video flows, orange when the camera has a problem, and faded while there is no video for another reason, such as no camera connected or the camera starting. A red dot means it records. Its menu has:
 
 - the camera's state, for example "GoPro HERO13 Black: 1080p, linear";
+- **Record**, or **Stop recording** with the time so far, and **Open recordings folder** (see [Recording](#recording));
 - **Camera**: On demand (the default; streams while an application uses the camera), Always on (streams while it is connected) or Off (never streams; the picture says so).
 - **Field of view**: Wide, Narrow, SuperView or Linear. The camera restarts with the new one, which takes about 4 seconds; applications keep the camera open meanwhile.
 - **Resolution**: 1080p or 720p. Applications keep the frame size they started the video with, so a new resolution applies once no application uses the camera; turn the video off and on again in the application.
 - **Hardware decoding** and **Notifications**, on or off.
 - **Restart gpwebcam**, when it runs as the systemd service.
 - **Hide icon**. Bring it back with `gpwebcam config tray on`.
+- **Quit gpwebcam** stops the service, and with it the **GoPro** camera in applications, until the next login or until you start it from **GoPro Webcam** in the application menu.
 
-The icon needs a desktop with a system tray that speaks StatusNotifierItem: KDE Plasma, Waybar, Quickshell and similar bars show it, and GNOME shows it only with the AppIndicator extension (Ubuntu has it on by default). Without a tray, use `gpwebcam config`.
+The icon needs a desktop with a system tray that speaks StatusNotifierItem: KDE Plasma, Waybar, Quickshell and similar bars show it, and GNOME shows it only with the AppIndicator extension (Ubuntu has it on by default). Without a tray, use `gpwebcam config` and `gpwebcam record`.
+
+### Recording
+
+**Record** in the tray menu, or `gpwebcam record start`, copies the camera's video into a file as the camera sends it: H.264 in a Matroska (`.mkv`) file, about 2.7 GB per hour, without audio, since the camera's webcam mode has none. Nothing is decoded or encoded again, so it costs almost no CPU, and the webcam picture goes on without a break.
+
+```sh
+gpwebcam record start   # prints the file
+gpwebcam record         # says whether it records, and for how long
+gpwebcam record stop    # prints the file, its length and size
+```
+
+- Recordings go to `~/Videos/gpwebcam`, named by the time they start, for example `GoPro-2026-10-07-101500.mkv`. **Open recordings folder** shows them in the file manager.
+- While recording, the camera streams even when no application uses it.
+- Unplugging the camera or turning the camera mode off ends the recording; the file stays playable. Changing the field of view or the decoder restarts the camera, and the recording goes on in a new file.
+- A recording needs 1 GB of free space to start.
+- To record into another folder, give `gpwebcam run` the folder and let the service write there. Run `systemctl --user edit gpwebcam.service` and write:
+
+  ```ini
+  [Service]
+  ExecStart=
+  ExecStart=/usr/bin/gpwebcam run -record-dir /media/data/GoPro
+  ReadWritePaths=/media/data/GoPro
+  ```
+
+  The service may write only to the folders its unit allows; the packaged unit allows `~/Videos`.
 
 ### Settings
 
@@ -172,7 +200,7 @@ The empty `ExecStart=` clears the packaged command before setting the new one. S
 
 ### Options
 
-`gpwebcam run` and `gpwebcam start` take the same options, except `-camera` and `-tray`, which only `run` has; `start` always streams. `-camera`, `-res`, `-fov`, `-hwdec`, `-notify` and `-tray` override the [settings](#settings) file; without them the file applies.
+`gpwebcam run` and `gpwebcam start` take the same options, except `-camera`, `-record-dir` and `-tray`, which only `run` has; `start` always streams. `-camera`, `-res`, `-fov`, `-hwdec`, `-notify` and `-tray` override the [settings](#settings) file; without them the file applies.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -186,6 +214,7 @@ The empty `ExecStart=` clears the packaged command before setting the new one. S
 | `-notify` | `true` | Desktop notifications; `-notify=false` turns them off. |
 | `-tray` | `true` | Tray icon; `-tray=false` turns it off. |
 | `-camera` | `demand` | When the camera streams: `demand`, `always` or `off`. |
+| `-record-dir` | `~/Videos/gpwebcam` | Folder for [recordings](#recording), an absolute path; the service also needs `ReadWritePaths` for it. |
 | `-ffmpeg` | `ffmpeg` | ffmpeg executable. |
 | `-dhcp-wait` | `30s` | How long to wait for the camera to give the computer an address. |
 | `-connect-wait` | `20s` | How long to wait for the camera to answer. |
@@ -196,6 +225,8 @@ Commands:
 - `gpwebcam run` keeps running and handles plugging and unplugging; it is what the service runs.
 - `gpwebcam start` streams one camera session and exits when it ends.
 - `gpwebcam config [<setting> [<value>]]` shows or changes the [settings](#settings).
+- `gpwebcam record [start|stop]` starts or stops a [recording](#recording) in the running service.
+- `gpwebcam launch` starts the user service, as **GoPro Webcam** in the application menu does.
 - `gpwebcam doctor` checks the setup and says what to fix; it takes `-ffmpeg`, `-iface`, `-video-nr`, `-device-label`, `-port` and `-http-timeout`.
 - `gpwebcam list` lists connected GoPro network interfaces.
 - `gpwebcam version` prints the version.
@@ -234,13 +265,16 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 | An application does not list the camera | The service was not running when the application started. Start the service, then restart the application once. |
 | `an application keeps the device at its size` | An application had the camera open when gpwebcam started or changed the resolution, so the device kept its old size. gpwebcam goes on at that size and tries again when applications start or stop using the camera; closing the camera in every application lets the new resolution apply. |
 | The camera does not start when an application opens it | With camera mode `demand`, gpwebcam starts the camera when the application turns its video on, not when it lists cameras; give it about 5 seconds. `gpwebcam doctor` says whether your v4l2loopback reports applications at all; if not, the camera streams whenever it is connected. Mode `off` never starts it. |
+| `cannot record: … read-only file system` | The service may not write to the recordings folder. With the default folder, `~/Videos` did not exist when the service started: create it and restart the service. With `-record-dir`, add `ReadWritePaths` for the folder, as in [Recording](#recording). |
+| `not enough free space to record` | Free some space; a recording needs 1 GB to start. |
+| `gpwebcam run is not running` from `gpwebcam record` | Start the service: `systemctl --user start gpwebcam`. |
 | No tray icon | The desktop has no system tray (GNOME needs the AppIndicator extension), or the icon was hidden: `gpwebcam config tray on`. `gpwebcam doctor` checks both. |
 | `settings file not used` or `settings file changed but cannot be used` | The settings file has an unknown setting or value; the log says which. gpwebcam keeps the defaults or the last good settings. Fix it with `gpwebcam config`, or delete the file. |
 | An application reports the camera as busy | Another application has the camera open. Like any V4L2 camera, it can be used by one application at a time; close it in the other application first. |
 
 ## Limitations
 
-- The camera's webcam mode provides at most 1080p at 30 fps, with no audio and no stabilization.
+- The camera's webcam mode provides at most 1080p at 30 fps, with no audio and no stabilization; recordings are the same.
 - One camera at a time.
 - One application at a time can use the camera. This is a V4L2 rule that v4l2loopback enforces since version 0.14, the same as for a USB webcam.
 

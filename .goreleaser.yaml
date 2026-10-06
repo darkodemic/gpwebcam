@@ -86,6 +86,11 @@ nfpms:
         dst: /usr/lib/modprobe.d/99-gpwebcam.conf
         file_info:
           mode: 0644
+      # "GoPro Webcam" in the application menu runs gpwebcam launch.
+      - src: packaging/desktop/gpwebcam.desktop
+        dst: /usr/share/applications/gpwebcam.desktop
+        file_info:
+          mode: 0644
       # RPM marks documentation as such (rpmlint), so the man page and
       # README appear once per packager.
       - src: packaging/man/gpwebcam.1.gz

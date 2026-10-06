@@ -119,18 +119,20 @@ flowchart LR
 
 - `-map 0:v:0 -c copy`: samo video, bez ponovnog kodiranja; procesor skoro ne radi.
 - Matroska (`.mkv`), jer ostaje čitljiva i kad snimanje prekine izvučen kabl (predajna beleška §10.2).
-- Folder: `$XDG_VIDEOS_DIR/gpwebcam` kad je XDG folder za video podešen i nije sam home, inače `~/Videos/gpwebcam`. Ime fajla po vremenu početka, na primer `GoPro-2026-10-06-135012.mkv`.
+- Folder: odlučeno 2026-10-07 (Darko), uvek `~/Videos/gpwebcam`, jer unit dozvoljava pisanje samo u `~/Videos` (§6). Drugi folder: flag `-record-dir` uz drop-in sa `ReadWritePaths`. Prvobitni predlog sa `$XDG_VIDEOS_DIR` je odbačen: na Darkovoj mašini XDG folder za video nije podešen, a lokalizovan folder bi unit ionako morao posebno da dozvoli. Ime fajla po vremenu početka, na primer `GoPro-2026-10-06-135012.mkv`; isto vreme dobija `-2`, `-3`.
 - Oko 6 Mb/s, oko 2.7 GB na sat. Bez zvuka.
 - Izvlačenje kabla ili zaustavljanje servisa završava snimak, i fajl ostaje ispravan. Kad se kamera vrati, snimanje se ne nastavlja samo; korisnik ga ponovo pokreće.
 
 ### 5.3 Bez tray-a
 
-Ko nema tray, snima komandom `gpwebcam record start|stop`. Komanda razgovara sa servisom preko Unix socket-a u `$XDG_RUNTIME_DIR/gpwebcam/` (HTTP preko `net/http`, standardna biblioteka). Može u 0.2.0 ili kasnije.
+Ko nema tray, snima komandom `gpwebcam record start|stop`. Komanda razgovara sa servisom preko Unix socket-a u `$XDG_RUNTIME_DIR/gpwebcam/` (HTTP preko `net/http`, standardna biblioteka). Odlučeno 2026-10-06 (Darko): ide u 0.2.0.
 
 ## 6. Unit i sandbox
 
-- Servis treba da piše u folder sa snimcima i u `~/.config/gpwebcam/`. Treba proveriti da li user unit sa `ConfigurationDirectory=gpwebcam` dobija pravo pisanja u `~/.config/gpwebcam` uprkos `ProtectHome=read-only`.
-- Za snimke: `ReadWritePaths=-%h/Videos` ("-" znači da unit ne pada kad folder ne postoji). Lokalizovan ili drugačiji XDG folder traži drop-in ili blaži `ProtectHome`. Odluka posle provere.
+- Servis treba da piše u folder sa snimcima i u `~/.config/gpwebcam/`. `ConfigurationDirectory=gpwebcam` daje pravo pisanja u `~/.config/gpwebcam` uprkos `ProtectHome=read-only` (provereno 2026-10-06, §9).
+- Za snimke, odlučeno 2026-10-07 (Darko): `ReadWritePaths=-%h/Videos`, a `ProtectHome=read-only` ostaje. "-" znači da unit ne pada kad folder ne postoji (provereno 2026-10-07 privremenim user unit-om); snimanje tada ne uspe, sa porukom. Druga opcija, postavka sa bilo kojim folderom bez `ProtectHome`, je odbačena jer bi servis i ffmpeg smeli da pišu svuda u home.
+- Kontrolni socket: `RuntimeDirectory=gpwebcam` daje `/run/user/<uid>/gpwebcam`, u koji servis sme da piše, dok je ostatak `/run/user/<uid>` pod `ProtectSystem=strict` samo za čitanje (provereno 2026-10-07).
+- Folder sa snimcima otvara fajl menadžer preko `org.freedesktop.FileManager1.ShowFolders` na session D-Bus-u. Proces pokrenut iz servisa (`xdg-open`) bi delio njegov sandbox, pa i home samo za čitanje; D-Bus aktivacija pokreće fajl menadžer van njega.
 - `RestrictAddressFamilies` već dozvoljava `AF_UNIX`, pa D-Bus i kontrolni socket rade bez izmene.
 
 ## 7. Preseci
@@ -199,4 +201,17 @@ Uz svaki presek: README, man stranica, `doctor` (tray host, folder za snimke) i 
   - Greške: `ErrNoPackets` (nijedan datagram, verovatno firewall ili VPN) i `ErrNoVideo` sa brojem datagrama kad stižu, a ffmpeg ništa ne dekodira. Savet o firewall-u na zamenskoj slici sada ide samo uz `ErrNoPackets`. Brojači (primljeno, odbačeno, tuđe) idu u log kad nešto fali.
   - ffmpeg koji čeka na pipe-u ne reaguje na SIGTERM; prekid sada prvo zatvori njegov stdin, pa ffmpeg izlazi odmah (test prekida: 0.3 s umesto 2.3 s, odnosno umesto `grace`).
   - Kašnjenje, novi test `TestLatency` (`GPWEBCAM_LATENCY=1`): lokalni libx264 640x360 30 fps, broj frejma upisan u piksele, vreme slanja iz `showinfo`; 390 frejmova po merenju. Stari put (ffmpeg sluša UDP, `main` `99a6349`): medijana 134 ms softverski, 135 ms VAAPI; novi: 134 ms i 135 ms; p90 135 i 136 ms u oba. Sopstveni prijem ne dodaje kašnjenje. Stalnih oko 134 ms (4 frejma) je u putu pošiljalac i dekoder, isto za obe verzije; zato test poredi verzije, a ne meri kašnjenje kamere.
-- Sledeće: proba uživo sa kamerom (da li kamera šalje sa svoje adrese), commit preseka 2, pa presek 3 (snimanje).
+- 2026-10-06: proba uživo: video 4.1 s posle uključivanja, bez tuđih i odbačenih datagrama, pa kamera šalje sa svoje adrese. Darko instalirao paket i probao sa Zoom-om. Commit `4f4ff85`, CI zelen.
+- 2026-10-07, presek 3 napisan u worktree-ju `.worktrees/recording`, grana `feat/recording` (testovi prolaze sa `-race`, i na pravom Go 1.22):
+  - `stream.Config.OnPacket` daje snimaču iste datagrame koje dobija dekoder, bez kopiranja; svaki datagram ima svoj slice koji niko ne menja.
+  - `internal/record`: drugi ffmpeg, `-f mpegts -i pipe:0 -map 0:v:0 -c copy -f matroska`, svoj red od 2048 datagrama (višak se odbacuje i broji), proces na zaključanoj niti zbog `Pdeathsig`. Fajl se pravi unapred sa `O_EXCL`, pa ga ffmpeg prepisuje. Potrebno je najmanje 1 GB slobodnog mesta. Test: TS sa video i audio stream-om iseče se na datagrame, a `ffprobe` potvrđuje Matroska fajl sa samo video stream-om od oko 3 s.
+  - Servis: snimanje važi dok ga korisnik ne ugasi, a fajl postoji dok traje sesija; nova sesija (promena FOV-a ili dekodera) otvara novi fajl. Snimanje drži kameru upaljenom i u režimu demand. Izvučen kabl i režim off završavaju snimanje, i ono se ne nastavlja samo. Kad ffmpeg sam stane (pun disk), snimanje se gasi uz notifikaciju.
+  - Kontrolni API: `GET /v1/status`, `POST /v1/record/start`, `POST /v1/record/stop`, socket 0600; `gpwebcam record [start|stop]` čeka do 20 s da se fajl otvori, jer kamera u režimu demand prvo mora da krene.
+  - Tray: Record, Stop recording sa vremenom (osvežava se svake sekunde), Open recordings folder; crvena tačka na ikonici dok se snima.
+  - `doctor` proverava `~/Videos` i slobodno mesto.
+- 2026-10-07, proba uživo (build iz worktree-ja, snimci u scratchpad, 720p, režim demand): `gpwebcam record start` dok kamera miruje pokrene kameru, a fajl se otvori za 2.4 s; promena FOV-a tokom snimanja sačuva prvi fajl i otvori drugi; `record stop` ispiše fajl, trajanje i veličinu. `ffprobe`: oba fajla su Matroska sa jednim H.264 1280x720 stream-om, 7.0 s i 3.5 s (ffmpeg pri kopiranju odbacuje početne frejmove do prvog ključnog). Pisanje u `~/Videos` iz sandbox-a servisa ostaje za probu sa paketom.
+- 2026-10-07, Darkova proba paketa iz radnog stabla: Record i Stop iz menija, snimanje u 1080p posle promene rezolucije i otvaranje foldera rade iz sandbox-a servisa (`~/Videos/gpwebcam`, `ReadWritePaths=-%h/Videos`). Dve ispravke:
+  - Veličina u notifikaciji: "8 MB" za fajl koji Nautilus prikazuje kao 9.2 MB. Bajtovi su bili tačni (`bytes=9165466` u logu, isto kao `ls`), ali su prikazani kao MiB (`>>20`), bez decimala. Sada `record.SizeText` računa decimalno sa jednom decimalom, kao Nautilus i Dolphin, i u notifikaciji, i u `gpwebcam record stop`, i u porukama o slobodnom mestu; prag je tačno 1 GB.
+  - Prvi snimak je pao na sesiju u kojoj je kamera prijavila stream, a stiglo je samo 49 datagrama bez ijednog frejma, pa je ostao fajl od 52 kB bez slike. Snimač sada kreće sa prvim dekodiranim frejmom, a ne na početku sesije, pa sesija bez videa ne ostavlja fajl.
+- 2026-10-07: Darko predložio "Quit gpwebcam" na dnu menija i pokretač u meniju aplikacija, da se servis vrati bez terminala; dogovoreno oboje. Quit zaustavlja servis preko systemd-a (`GetUnitByPID`, pa `Unit.Stop`), pa ga systemd ne pokreće ponovo; bez systemd-a samo uredno završi proces. Notifikacija ide sinhrono (`notify.SendNow`), pre nego što proces nestane. Pokretač: `packaging/desktop/gpwebcam.desktop` u `/usr/share/applications`, "GoPro Webcam", ikonica `camera-web` iz teme dok Darko ne napravi svoju; pokreće `gpwebcam launch`, koji pokreće servis preko `Manager.StartUnit`, čeka da bude aktivan i notifikacijom javlja ishod, jer iz menija nema terminala. `desktop-file-validate` bez primedbi; `gpwebcam launch` dok servis radi kaže "already running".
+- Sledeće: proba paketa (Quit, GoPro Webcam iz menija), commit preseka 3, pa izdanje 0.2.0.

@@ -51,6 +51,11 @@ type Config struct {
 	FirstFrame time.Duration
 	// OnStats, if set, gets the receiver's counts when the run ends.
 	OnStats func(Stats)
+	// OnPacket, if set, gets every datagram from the camera as it arrives,
+	// for example for a recording. It must not block. Each datagram has a
+	// slice of its own that nobody changes, so it may be kept, but not
+	// changed: ffmpeg reads the same one.
+	OnPacket func([]byte)
 }
 
 // Validate rejects configurations that would make ffmpeg listen beyond the
@@ -140,7 +145,7 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	rcv, err := listen(c.Listen, c.Camera)
+	rcv, err := listen(c.Listen, c.Camera, c.OnPacket)
 	if err != nil {
 		return err
 	}

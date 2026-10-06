@@ -76,7 +76,7 @@ func (s *server) wantCamera() bool {
 	case settings.CameraAlways:
 		return true
 	}
-	return !s.usageOK.Load() || s.used.Load()
+	return !s.usageOK.Load() || s.used.Load() || s.recording()
 }
 
 // idle waits, with the camera's webcam mode off, until the camera should

@@ -20,6 +20,7 @@ import (
 	"github.com/godbus/dbus/v5"
 
 	"github.com/darkodemic/gpwebcam/internal/camera"
+	"github.com/darkodemic/gpwebcam/internal/record"
 	"github.com/darkodemic/gpwebcam/internal/settings"
 	"github.com/darkodemic/gpwebcam/internal/stream"
 	"github.com/darkodemic/gpwebcam/internal/usbnet"
@@ -106,6 +107,7 @@ func cmdDoctor(args []string, stdout io.Writer) error {
 	checkFirewall(r, f.port)
 	checkNotifications(r)
 	checkTray(r, set)
+	checkRecordings(r)
 
 	fmt.Fprintf(stdout, "\n%d problem(s), %d warning(s).\n", r.fails, r.warns)
 	if r.fails > 0 {
@@ -505,6 +507,31 @@ func checkTray(r *report, s settings.Settings) {
 		return
 	}
 	r.ok("the desktop has a system tray")
+}
+
+// checkRecordings looks at the default recordings folder; the packaged
+// unit lets the service write to ~/Videos only.
+func checkRecordings(r *report) {
+	r.section("recordings")
+	dir, err := defaultRecordDir()
+	if err != nil {
+		r.warn(err.Error())
+		return
+	}
+	videos := filepath.Dir(dir)
+	if info, err := os.Stat(videos); err != nil || !info.IsDir() {
+		r.warn(fmt.Sprintf("%s does not exist, so the service cannot record there", videos),
+			"Create it: mkdir ~/Videos, then: systemctl --user restart gpwebcam")
+		return
+	}
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(videos, &st); err == nil {
+		if free := st.Bavail * uint64(st.Bsize); free < record.MinFree {
+			r.warn(fmt.Sprintf("only %s free in %s; a recording needs %s to start", record.SizeText(free), videos, record.SizeText(record.MinFree)))
+			return
+		}
+	}
+	r.ok("recordings go to %s (with -record-dir, to that folder)", dir)
 }
 
 func checkNotifications(r *report) {

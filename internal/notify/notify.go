@@ -49,6 +49,15 @@ func New() *Notifier {
 // Send shows summary and body, unless the same pair was shown within
 // repeatGap. It returns at once; notify-send runs in the background.
 func (n *Notifier) Send(urgency, summary, body string) {
+	n.send(urgency, summary, body, false)
+}
+
+// SendNow is Send that waits for notify-send, for a process about to exit.
+func (n *Notifier) SendNow(urgency, summary, body string) {
+	n.send(urgency, summary, body, true)
+}
+
+func (n *Notifier) send(urgency, summary, body string, wait bool) {
 	if n == nil || n.run == nil {
 		return
 	}
@@ -69,9 +78,14 @@ func (n *Notifier) Send(urgency, summary, body string) {
 		"--expire-time=6000",
 		"--", summary, body,
 	}
-	go func() {
+	show := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = n.run(ctx, args...)
-	}()
+	}
+	if wait {
+		show()
+		return
+	}
+	go show()
 }

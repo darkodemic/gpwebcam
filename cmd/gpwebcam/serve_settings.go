@@ -21,6 +21,11 @@ func (s *server) settingsChanged(old, cur settings.Settings) {
 	if cur.Camera != old.Camera {
 		switch {
 		case cur.Camera == settings.CameraOff:
+			// The session saves the recording; recording does not resume
+			// when the camera is turned on again.
+			s.recMu.Lock()
+			s.recWant = false
+			s.recMu.Unlock()
 			s.endSession(errOff)
 		case !s.wantCamera():
 			s.endSession(errIdle)
@@ -69,12 +74,15 @@ func (s *server) view() tray.View {
 	for _, k := range settings.Keys {
 		locked[k] = s.live.Locked(k)
 	}
+	rec, _, since, _ := s.recStatus()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return tray.View{
 		State: s.trayState, Status: s.trayStatus,
 		Settings: set, Locked: locked, ResPending: set.Res != s.res,
 		CanRestart: underSystemd(),
+		CanRecord:  s.present.Load() && set.Camera != settings.CameraOff,
+		Recording:  rec, RecordingSince: since,
 	}
 }
 
@@ -102,6 +110,37 @@ func (s *server) startTray() {
 			if err := s.live.Set(key, value); err != nil {
 				s.log.Warn("change setting from the tray", "setting", key, "err", err)
 			}
+		},
+		Record: func(on bool) {
+			if err := s.setRecording(on); err != nil {
+				s.log.Warn("recording from the tray", "err", err)
+				s.note(notify.Normal, "gpwebcam cannot record", err.Error())
+			}
+		},
+		OpenRecordings: func() {
+			if err := showFolder(s.recDir); err != nil {
+				s.log.Warn("show the recordings folder", "dir", s.recDir, "err", err)
+				s.note(notify.Normal, "Recordings are in "+s.recDir, "The file manager could not be opened.")
+			}
+		},
+		Quit: func() {
+			s.log.Info("quit asked from the tray")
+			// Shown before the service stops; the icon goes with it.
+			if s.live.Get().Notify {
+				s.notify.SendNow(notify.Low, "gpwebcam stopped",
+					"It starts again at the next login, or from GoPro Webcam in the application menu.")
+			}
+			go func() {
+				// Through systemd, which then does not restart the service.
+				if underSystemd() {
+					err := stopService()
+					if err == nil {
+						return
+					}
+					s.log.Warn("stop through systemd", "err", err)
+				}
+				s.quit()
+			}()
 		},
 		Restart: func() {
 			s.log.Info("restart asked from the tray")

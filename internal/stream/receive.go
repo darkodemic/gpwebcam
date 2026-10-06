@@ -35,18 +35,19 @@ type receiver struct {
 	conn   *net.UDPConn
 	camera netip.Addr // only datagrams from here count; any when invalid
 	queue  chan []byte
+	tap    func([]byte) // gets every datagram from the camera, if set
 
 	packets, bytes, dropped, foreign atomic.Int64
 	last                             atomic.Int64 // UnixNano of the last datagram
 }
 
-func listen(addr netip.AddrPort, camera netip.Addr) (*receiver, error) {
+func listen(addr netip.AddrPort, camera netip.Addr, tap func([]byte)) (*receiver, error) {
 	conn, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(addr))
 	if err != nil {
 		return nil, fmt.Errorf("listen for the camera's stream: %w", err)
 	}
 	_ = conn.SetReadBuffer(readBuffer) // best effort
-	return &receiver{conn: conn, camera: camera, queue: make(chan []byte, queueLen)}, nil
+	return &receiver{conn: conn, camera: camera, queue: make(chan []byte, queueLen), tap: tap}, nil
 }
 
 // read queues datagrams until the socket is closed, then closes the queue.
@@ -67,6 +68,9 @@ func (r *receiver) read() {
 		r.packets.Add(1)
 		r.bytes.Add(int64(n))
 		r.last.Store(time.Now().UnixNano())
+		if r.tap != nil {
+			r.tap(p)
+		}
 		select {
 		case r.queue <- p:
 		default:

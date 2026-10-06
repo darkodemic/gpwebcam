@@ -75,8 +75,12 @@ func over(dst rgba, c color.NRGBA) rgba {
 	}
 }
 
-// Icon draws the icon for a state as PNG: a camera body with a dark lens.
-func Icon(st State) []byte {
+// red marks a recording, in the icon's top right corner.
+var red = color.NRGBA{0xe5, 0x39, 0x35, 0xff}
+
+// Icon draws the icon for a state as PNG: a camera body with a dark lens,
+// and a red dot while recording.
+func Icon(st State, recording bool) []byte {
 	body, ok := bodyColors[st]
 	if !ok {
 		st, body = Off, bodyColors[Off]
@@ -90,7 +94,16 @@ func Icon(st State) []byte {
 		{circle(36, 32, 7), lensInner},
 		{circle(39, 29, 2.5), shine},
 	}
+	if recording {
+		shapes = append(shapes,
+			shape{circle(52, 12, 11), outline},
+			shape{circle(52, 12, 9), red},
+		)
+	}
 	fade := opacity[st]
+	if recording {
+		fade = 1 // a recording is never faded
+	}
 	img := image.NewNRGBA(image.Rect(0, 0, iconSize, iconSize))
 	const n = subsamples * subsamples
 	for py := 0; py < iconSize; py++ {

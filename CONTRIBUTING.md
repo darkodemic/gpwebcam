@@ -14,12 +14,13 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 | Path | What it holds |
 |---|---|
-| `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, camera on demand (`demand.go`), restart through systemd's D-Bus API (`systemd.go`), and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
+| `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, camera on demand (`demand.go`), restart through systemd's D-Bus API (`systemd.go`), recording (`recording.go`), the control API on a Unix socket for `gpwebcam record` (`control.go`, `recordcmd.go`), the file manager over D-Bus (`filemanager.go`), and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
 | `internal/settings` | The settings that the tray menu and `gpwebcam config` change, with their checks, saved as JSON in `~/.config/gpwebcam/settings.json`. |
 | `internal/tray` | The tray icon and its menu through `fyne.io/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
 | `internal/stream` | Receives the camera's MPEG-TS datagrams over UDP, watches that they keep coming, and runs ffmpeg, which decodes them from one pipe and hands raw frames back over another. |
+| `internal/record` | Copies the camera's MPEG-TS datagrams into a Matroska file with a second ffmpeg (`-c copy`), named by the time, without decoding. |
 | `internal/feed` | Keeps the loopback device supplied: live frames, or the placeholder between them. |
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
@@ -74,7 +75,7 @@ The linters are clean apart from known, accepted findings: lintian `initial-uplo
 
 The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decisions/packaging-and-release.md`):
 
-- Files go only under `/usr`: `/usr/bin`, `/usr/lib/systemd/user`, `/usr/lib/modules-load.d`, `/usr/lib/modprobe.d`, `/usr/share/doc`, `/usr/share/licenses`. Nothing goes into `/etc` or a home directory.
+- Files go only under `/usr`: `/usr/bin`, `/usr/lib/systemd/user`, `/usr/lib/modules-load.d`, `/usr/lib/modprobe.d`, `/usr/share/applications` (the **GoPro Webcam** menu entry, `packaging/desktop/gpwebcam.desktop`; check it with `desktop-file-validate`), `/usr/share/doc`, `/usr/share/licenses`. Nothing goes into `/etc` or a home directory.
 - The package never enables or starts the user service, and never loads the kernel module; the post-install script only prints instructions.
 
 ## CI and releases
