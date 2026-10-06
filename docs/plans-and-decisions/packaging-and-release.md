@@ -1,89 +1,89 @@
-# Pakovanje i javno izdanje
+# Packaging and public release
 
-- **Status:** U izradi. Odlučeno 2026-10-05: licenca Apache-2.0 (ADR 0004); ime `gpwebcam`, GoReleaser 2.18.2, raspored iz §3 i modprobe.d opcija A (ADR 0005). Paketi se prave lokalno; instalacija i test čekaju.
+- **Status:** In progress. Decided 2026-10-05: Apache-2.0 license (ADR 0004); the name `gpwebcam`, GoReleaser 2.18.2, the layout from §3 and modprobe.d option A (ADR 0005). Packages are built locally; installation and testing are pending.
 - **Date:** 2026-10-05
 - **Owner:** Darko
-- **Related:** ADR 0003 (gw drži loopback uređaj i radi kao user servis); ADR 0004 (licenca Apache-2.0); ADR 0005 (ime gpwebcam i paketi kroz GoReleaser); `second-slice-gw-run.md`
+- **Related:** ADR 0003 (gw owns the loopback device and runs as a user service); ADR 0004 (Apache-2.0 license); ADR 0005 (The name gpwebcam and packages through GoReleaser); `second-slice-gw-run.md`
 
-## 1. Cilj
+## 1. Goal
 
-Paketi koji poštuju pravila distribucija od početka, iako prvo idu samo na GitHub release: `.deb`, `.rpm`, Arch `.pkg.tar.zst` i `tar.gz` sa checksum-ovima. Prvo se prave i instaliraju lokalno, a kasnije se predaju kanalima distribucija (§6).
+Packages that follow distribution rules from the start, even though they first go only to a GitHub release: `.deb`, `.rpm`, Arch `.pkg.tar.zst` and `tar.gz` with checksums. They are first built and installed locally, and later submitted to the distribution channels (§6).
 
-Izvori su pročitani 2026-10-05; oznaka [D] znači zvanična dokumentacija ili izvorni kod paketa, a [I] zaključak.
+The sources were read on 2026-10-05; the mark [D] means official documentation or package source code, and [I] an inference.
 
-## 2. Ime
+## 2. Name
 
-`gw` je zauzet (proveravano 2026-10-05):
+`gw` is taken (checked 2026-10-05):
 
-- AUR: paket `gw` (genome browser, instalira `/usr/bin/gw`) i `gw-tools` (git worktree, takođe `/usr/bin/gw`) [D].
-- Debian sid: `greaseweazle` instalira `/usr/bin/gw`, a Debian Policy 10.1 ne dozvoljava dva programa istog imena [D].
-- Slobodno je u zvaničnim Arch repoima, Fedori i Ubuntu noble-u.
+- AUR: the package `gw` (genome browser, installs `/usr/bin/gw`) and `gw-tools` (git worktree, also `/usr/bin/gw`) [D].
+- Debian sid: `greaseweazle` installs `/usr/bin/gw`, and Debian Policy 10.1 does not allow two programs with the same name [D].
+- It is free in the official Arch repos, Fedora and Ubuntu noble.
 
-Slobodna imena (Arch, AUR, Debian, Fedora; i paket i `/usr/bin` fajl): `gpwebcam`, `herocam`, `gopro-webcam`. "GoPro" i "HERO" su zaštićeni znakovi, pa je `gpwebcam` najbezbedniji [I]. Na AUR-u je 2026-09-30 objavljen srodan projekat `action-webcamd` (Rust, sistemski servis za GoPro).
+Free names (Arch, AUR, Debian, Fedora; both the package and the `/usr/bin` file): `gpwebcam`, `herocam`, `gopro-webcam`. "GoPro" and "HERO" are trademarks, so `gpwebcam` is the safest [I]. A related project, `action-webcamd` (Rust, a system service for GoPro), was published on the AUR on 2026-09-30.
 
-## 3. Raspored fajlova
+## 3. File layout
 
-Isti na Arch-u, Debian-u i Fedori [D]; `<n>` je novo ime:
+The same on Arch, Debian and Fedora [D]; `<n>` is the new name:
 
-| Fajl | Putanja |
+| File | Path |
 |---|---|
 | program | `/usr/bin/<n>`, 0755 |
-| user servis | `/usr/lib/systemd/user/<n>.service`, `ExecStart=/usr/bin/<n> run`; na Fedori nikad `%config` |
-| učitavanje modula | `/usr/lib/modules-load.d/<n>.conf` |
-| opcije modula | `/usr/lib/modprobe.d/99-<n>.conf`; Debian ne dozvoljava `/lib/...` (lintian `aliased-location`) |
-| man stranica | `/usr/share/man/man1/<n>.1.gz`; Debian bez nje daje lintian upozorenje |
+| user service | `/usr/lib/systemd/user/<n>.service`, `ExecStart=/usr/bin/<n> run`; never `%config` on Fedora |
+| module loading | `/usr/lib/modules-load.d/<n>.conf` |
+| module options | `/usr/lib/modprobe.d/99-<n>.conf`; Debian does not allow `/lib/...` (lintian `aliased-location`) |
+| man page | `/usr/share/man/man1/<n>.1.gz`; without it Debian gives a lintian warning |
 | README | `/usr/share/doc/<n>/README.md` |
-| licenca | Arch: `/usr/share/licenses/<n>/LICENSE` (nije obavezno za Apache-2.0, `licenses` paket ga ima); Fedora: isto, kao `%license`; Debian: `/usr/share/doc/<n>/copyright` u DEP-5 formatu, sa pozivom na `/usr/share/common-licenses/Apache-2.0` |
+| license | Arch: `/usr/share/licenses/<n>/LICENSE` (not required for Apache-2.0, the `licenses` package has it); Fedora: the same, as `%license`; Debian: `/usr/share/doc/<n>/copyright` in DEP-5 format, with a reference to `/usr/share/common-licenses/Apache-2.0` |
 
-Paket ne sme da piše u `$HOME` ni u `/etc` (`/etc` je za administratora; fajl istog imena u `/etc` sakriva onaj iz `/usr/lib`), i ne pokreće user servise iz skripti [D]. Ne uključuje servis za sve korisnike: Arch ne koristi presets, Fedora uključuje samo servise koji rade bez podešavanja, a `systemd.preset(5)` ne preporučuje preset u paketu [D]. Uz to, ako bi servis bio uključen za sve, prvi prijavljeni korisnik bi zauzeo `/dev/video42`, a servisi ostalih bi se restartovali u krug [I]. Skripta posle instalacije samo ispisuje šta korisnik treba da uradi.
+A package must not write to `$HOME` or `/etc` (`/etc` is for the administrator; a file of the same name in `/etc` hides the one from `/usr/lib`), and it does not start user services from scripts [D]. It does not enable the service for all users: Arch does not use presets, Fedora enables only services that work without configuration, and `systemd.preset(5)` does not recommend a preset in a package [D]. Also, if the service were enabled for everyone, the first logged-in user would take `/dev/video42`, and the other users' services would restart in a loop [I]. The post-install script only prints what the user has to do.
 
-## 4. Podešavanje v4l2loopback modula
+## 4. Configuring the v4l2loopback module
 
-Činjenice [D]:
+Facts [D]:
 
-- modprobe.d: sve opcije se sabiraju, fajlovi se sortiraju po imenu kroz sve direktorijume, a fajl istog imena u `/etc` sakriva onaj iz `/usr/lib`.
-- Arch `v4l2loopback-dkms` i Debian `v4l2loopback-dkms`/`-utils` ne donose modprobe ni modules-load konfiguraciju. Debian `-utils` donosi udev pravilo za `/dev/v4l2loopback` (grupa `video`).
-- RPM Fusion `v4l2loopback` donosi `/usr/lib/modprobe.d/98-v4l2loopback.conf` (`exclusive_caps=1 card_label="OBS Virtual Camera"`) i učitava modul pri boot-u.
-- OBS: ako modul nije učitan, pokrene `pkexec modprobe v4l2loopback exclusive_caps=1 card_label='OBS Virtual Camera'`; ako jeste, uzme prvi `/dev/video*` koji prima izlaz.
-- `v4l2loopback-ctl add` traži kontrolni uređaj koji je samo za root-a.
+- modprobe.d: all options add up, files are sorted by name across all directories, and a file of the same name in `/etc` hides the one from `/usr/lib`.
+- Arch `v4l2loopback-dkms` and Debian `v4l2loopback-dkms`/`-utils` ship no modprobe or modules-load configuration. Debian `-utils` ships a udev rule for `/dev/v4l2loopback` (group `video`).
+- RPM Fusion `v4l2loopback` ships `/usr/lib/modprobe.d/98-v4l2loopback.conf` (`exclusive_caps=1 card_label="OBS Virtual Camera"`) and loads the module at boot.
+- OBS: if the module is not loaded, it runs `pkexec modprobe v4l2loopback exclusive_caps=1 card_label='OBS Virtual Camera'`; if it is, it takes the first `/dev/video*` that accepts output.
+- `v4l2loopback-ctl add` needs the control device, which is root-only.
 
-Opcije:
+Options:
 
-| Opcija | Šta | Za | Protiv |
+| Option | What | For | Against |
 |---|---|---|---|
-| A | paket donosi `modules-load.d/<n>.conf` (`v4l2loopback`) i `modprobe.d/99-<n>.conf`: `options v4l2loopback devices=2 video_nr=42,-1 card_label="GoPro,OBS Virtual Camera" exclusive_caps=1,1` | bez root-a u radu; drugi uređaj ostaje za OBS; pobeđuje RPM Fusion-ov `98-`, a administratorov fajl u `/etc` pobeđuje njega | menja podrazumevano ponašanje modula za sve programe; važi tek posle restarta ili ponovnog učitavanja modula |
-| B | sistemski oneshot servis koji pri boot-u kao root napravi uređaj sa `v4l2loopback-ctl add` | ne dira tuđe opcije | root u radu, protivno principu iz predajne beleške §4; traži nov ADR |
+| A | the package ships `modules-load.d/<n>.conf` (`v4l2loopback`) and `modprobe.d/99-<n>.conf`: `options v4l2loopback devices=2 video_nr=42,-1 card_label="GoPro,OBS Virtual Camera" exclusive_caps=1,1` | no root at runtime; the second device stays for OBS; it wins over RPM Fusion's `98-`, and the administrator's file in `/etc` wins over it | changes the module's default behavior for all programs; takes effect only after a reboot or a reload of the module |
+| B | a system oneshot service that creates the device as root at boot with `v4l2loopback-ctl add` | does not touch other programs' options | root at runtime, against the principle from handover note §4; needs a new ADR |
 
-Preporuka: A [I]. Uz nju `gw` treba da nađe svoj uređaj po imenu ("GoPro" u `/sys/class/video4linux/*/name`) umesto po broju 42, da administratorova promena broja ne bi pokvarila servis.
+Recommendation: A [I]. With it, `gw` should find its device by name ("GoPro" in `/sys/class/video4linux/*/name`) instead of by the number 42, so that an administrator changing the number does not break the service.
 
-## 5. Zavisnosti
+## 5. Dependencies
 
-| Distribucija | ffmpeg | modul |
+| Distribution | ffmpeg | module |
 |---|---|---|
-| Arch | `depends=(ffmpeg)` | `optdepends=('v4l2loopback-dkms: ...')`, kao obs-studio [D]; nFPM-ov archlinux paket ne ume da upiše optdepends (izvorni kod `arch/arch.go`), pa za AUR treba ručno pisan PKGBUILD [D] |
-| Debian, Ubuntu | `Depends: ffmpeg` | `Recommends: v4l2loopback-dkms \| v4l2loopback-modules`, `Suggests: v4l2loopback-utils`; Ubuntu noble ima modul u `linux-modules-*-generic` [D] |
-| Fedora | `Requires: /usr/bin/ffmpeg` [I], jer `ffmpeg-free` ne nosi ime `ffmpeg` | ne postoji u Fedori; RPM Fusion `v4l2loopback` i `akmod-v4l2loopback`; u COPR-u `Recommends: v4l2loopback` [I] |
+| Arch | `depends=(ffmpeg)` | `optdepends=('v4l2loopback-dkms: ...')`, like obs-studio [D]; nFPM's archlinux package cannot write optdepends (source code `arch/arch.go`), so the AUR needs a hand-written PKGBUILD [D] |
+| Debian, Ubuntu | `Depends: ffmpeg` | `Recommends: v4l2loopback-dkms \| v4l2loopback-modules`, `Suggests: v4l2loopback-utils`; Ubuntu noble has the module in `linux-modules-*-generic` [D] |
+| Fedora | `Requires: /usr/bin/ffmpeg` [I], because `ffmpeg-free` does not carry the name `ffmpeg` | not in Fedora; RPM Fusion `v4l2loopback` and `akmod-v4l2loopback`; in COPR `Recommends: v4l2loopback` [I] |
 
-Fedorin `ffmpeg-free` je preveden bez H.264 dekodera i oslanja se na `libopenh264` iz Cisco repoa, koji je uključen, ali paket nije podrazumevano instaliran [D]. Da li openh264 dekodira GoPro-ov High profile stream nije provereno; preporuka je RPM Fusion `ffmpeg`, a `gw doctor` treba da proveri `ffmpeg -decoders` [I].
+Fedora's `ffmpeg-free` is built without an H.264 decoder and relies on `libopenh264` from the Cisco repo, which is enabled, but the package is not installed by default [D]. Whether openh264 decodes the GoPro's High profile stream is not verified; the recommendation is RPM Fusion `ffmpeg`, and `gw doctor` should check `ffmpeg -decoders` [I].
 
-`go.mod` traži Go 1.26.8, a Debian trixie ima 1.24 [D]. Kod koristi ništa novije od Go 1.21 (`log/slog`, `slices`), pa direktivu treba spustiti na `go 1.22`.
+`go.mod` requires Go 1.26.8, and Debian trixie has 1.24 [D]. The code uses nothing newer than Go 1.21 (`log/slog`, `slices`), so the directive should be lowered to `go 1.22`.
 
-## 6. Kanali
+## 6. Channels
 
-Redosled [I]:
+Order [I]:
 
-1. GitHub release sa paketima iz GoReleaser-a (`.deb`, `.rpm`, `.pkg.tar.zst`, `tar.gz`, checksum-ovi). Testiranje na Arch-u, Debian trixie i Ubuntu noble-u, i Fedori sa RPM Fusion ffmpeg-om i sa `ffmpeg-free` + openh264.
-2. AUR: ručno pisan izvorni PKGBUILD (ime `<n>`, sa optdepends); po želji i `<n>-bin` preko GoReleaser `aurs` [D: `-bin` sufiks obavezan, `.SRCINFO` uz svaki push, SPDX u `license`].
-3. COPR za Fedoru [D: dovoljan Fedora nalog].
-4. Debian: ITP bug, pa mentors i sponzor; Go tim imenuje programe bez `golang-` prefiksa [D]. Ubuntu preuzima iz Debian-a. Procena 1 do 3 meseca [I]. PPA samo ako Ubuntu treba ranije.
-5. RPM Fusion: review u Bugzilli, kad COPR bude stabilan [D]. Zvanična Fedora ne prima pakete kojima treba modul van kernela [D].
-6. Po želji openSUSE OBS: jedno mesto za apt, yum i pacman repoe [D].
+1. A GitHub release with packages from GoReleaser (`.deb`, `.rpm`, `.pkg.tar.zst`, `tar.gz`, checksums). Testing on Arch, Debian trixie and Ubuntu noble, and on Fedora with RPM Fusion ffmpeg and with `ffmpeg-free` + openh264.
+2. AUR: a hand-written source PKGBUILD (name `<n>`, with optdepends); optionally also `<n>-bin` through GoReleaser `aurs` [D: `-bin` suffix required, `.SRCINFO` with every push, SPDX in `license`].
+3. COPR for Fedora [D: a Fedora account is enough].
+4. Debian: an ITP bug, then mentors and a sponsor; the Go team names programs without the `golang-` prefix [D]. Ubuntu takes it from Debian. Estimate 1 to 3 months [I]. A PPA only if Ubuntu is needed sooner.
+5. RPM Fusion: a review in Bugzilla, once COPR is stable [D]. Official Fedora does not accept packages that need an out-of-tree kernel module [D].
+6. Optionally openSUSE OBS: one place for apt, yum and pacman repos [D].
 
-GoReleaser 2.18.2 besplatno pravi nFPM pakete i objavljuje `-bin` na AUR; apt i yum repoi su samo u Pro verziji, a Debian, PPA i COPR nemaju publisher [D].
+GoReleaser 2.18.2 builds nFPM packages and publishes `-bin` to the AUR for free; apt and yum repos are only in the Pro version, and Debian, PPA and COPR have no publisher [D].
 
-## 7. Gde smo i šta sledi
+## 7. Where we are and what is next
 
-- 2026-10-05: licenca Apache-2.0 i `LICENSE` (ADR 0004); GoReleaser 2.18.2 kroz `mise.toml`; istraživanje pravila distribucija (ovaj dokument).
-- 2026-10-05: Darko izabrao ime `gpwebcam` i opciju A (ADR 0005). Urađeno: preimenovanje (`cmd/gpwebcam`, modul `github.com/darkodemic/gpwebcam`), `go 1.22` (provereno sa go1.22.12), uređaj po imenu "GoPro" (`-device-label`), `packaging/` (unit sa `/usr/bin/gpwebcam`, modules-load, modprobe, DEP-5 copyright, poruka posle instalacije), `.goreleaser.yaml`. `goreleaser release --snapshot --clean` pravi deb, rpm i Arch za amd64 i arm64; sadržaj i metapodaci provereni (`.PKGINFO`, deb `control`, liste fajlova, vlasnik root, prava 0644/0755). Unit sa svim ograničenjima (`ProtectSystem=strict`, `PrivateTmp` i ostala) radi kao privremeni user servis kroz `systemd-run --user`.
-- 2026-10-05: README podeljen: `README.md` za korisnike (instalacija po distribuciji, modul, servis, opcije, rešavanje problema), `CONTRIBUTING.md` za one koji razvijaju (alati, raspored koda, build, testovi, paketi, pravila). Projektna pravila za agente su u `AGENTS.md`, a `CLAUDE.md` samo uvozi taj fajl.
-- Sledeće: instalacija Arch paketa i `systemctl --user enable --now gpwebcam.service`; posle restarta proveriti da modprobe.d daje `/dev/video42` "GoPro" i drugi uređaj za OBS; man stranica i `gpwebcam doctor`; GitHub repo `darkodemic/gpwebcam`.
+- 2026-10-05: Apache-2.0 license and `LICENSE` (ADR 0004); GoReleaser 2.18.2 through `mise.toml`; research on distribution rules (this document).
+- 2026-10-05: Darko chose the name `gpwebcam` and option A (ADR 0005). Done: the rename (`cmd/gpwebcam`, module `github.com/darkodemic/gpwebcam`), `go 1.22` (verified with go1.22.12), the device by name "GoPro" (`-device-label`), `packaging/` (unit with `/usr/bin/gpwebcam`, modules-load, modprobe, DEP-5 copyright, post-install message), `.goreleaser.yaml`. `goreleaser release --snapshot --clean` builds deb, rpm and Arch for amd64 and arm64; contents and metadata verified (`.PKGINFO`, deb `control`, file lists, owner root, permissions 0644/0755). The unit with all restrictions (`ProtectSystem=strict`, `PrivateTmp` and the others) works as a transient user service through `systemd-run --user`.
+- 2026-10-05: README split: `README.md` for users (installation per distribution, module, service, options, troubleshooting), `CONTRIBUTING.md` for developers (tools, code layout, build, tests, packages, rules). The project rules for agents are in `AGENTS.md`, and `CLAUDE.md` only imports that file.
+- Next: install the Arch package and `systemctl --user enable --now gpwebcam.service`; after a reboot, check that modprobe.d gives `/dev/video42` "GoPro" and a second device for OBS; the man page and `gpwebcam doctor`; GitHub repo `darkodemic/gpwebcam`.

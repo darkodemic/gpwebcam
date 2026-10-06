@@ -1,80 +1,80 @@
-# Izdanje 0.1.0
+# Release 0.1.0
 
-- **Status:** Tag `v0.1.0` 2026-10-06, draft release čeka Darkovu objavu. Od M1 ostalo: servis pri prijavi posle restarta i Zoom sa paketom; ako nešto ne radi, ispravka ide u 0.1.1. Obim odlučen 2026-10-05: M1 do M4, F1, F2, F4, O1 do O4; F3 (snimanje) ide u 0.2.0 zajedno sa tray ikonicom (`tray-and-recording.md`).
+- **Status:** Tag `v0.1.0` 2026-10-06, the draft release waits for Darko to publish it. Left from M1: the service at login after a restart, and Zoom with the package; if something does not work, the fix goes into 0.1.1. Scope decided 2026-10-05: M1 to M4, F1, F2, F4, O1 to O4; F3 (recording) goes into 0.2.0 together with the tray icon (`tray-and-recording.md`).
 - **Date:** 2026-10-05
 - **Owner:** Darko
-- **Related:** `packaging-and-release.md` §6 (kanali), §7; `second-slice-gw-run.md` §3.1, §5; ADR 0005 (ime gpwebcam i paketi kroz GoReleaser); predajna beleška §10 (ideje)
+- **Related:** `packaging-and-release.md` §6 (channels), §7; `second-slice-gw-run.md` §3.1, §5; ADR 0005 (the name gpwebcam and packages through GoReleaser); handover note §10 (ideas)
 
-## 1. Obavezno pre taga
+## 1. Required before the tag
 
-| # | Stavka | Zašto |
+| # | Item | Why |
 |---|---|---|
-| M1 | Instalacija Arch paketa, `systemctl --user enable --now gpwebcam.service`, restart; provera da modprobe.d daje `/dev/video42` "GoPro" i drugi uređaj "OBS Virtual Camera", da servis krene pri prijavi i da ga Zoom vidi | paket i servis iz paketa još nisu isprobani zajedno; `card_label` sa zarezom i razmakom nije proveren (ADR 0005, Risks) |
-| M2 | Jednom izvući i vratiti kabl sa trikom start pa stop | trik je proveren samo na lažnoj kameri |
-| M3 | Čekanje na uređaj "GoPro" umesto izlaska kad modul još nije učitan | sada servis izlazi i systemd ga restartuje na 10 s, bez kraja, sa porukom u journal-u svaki put; i pri boot-u servis može da krene pre modula |
-| M4 | GitHub repo `darkodemic/gpwebcam`, CI (vet, test, build paketa na svaki push), GoReleaser na tag `v0.1.0`, prvo kao draft release | bez toga nema javnog izdanja; svaki korak traži Darkovo odobrenje |
+| M1 | Installing the Arch package, `systemctl --user enable --now gpwebcam.service`, restart; checking that modprobe.d gives `/dev/video42` "GoPro" and a second device "OBS Virtual Camera", that the service starts at login, and that Zoom sees it | the package and the service from the package have not been tried together yet; `card_label` with a comma and a space is not verified (ADR 0005, Risks) |
+| M2 | Unplug and plug back the cable once, with the start-then-stop trick | the trick is verified only on a fake camera |
+| M3 | Waiting for the device "GoPro" instead of exiting when the module is not loaded yet | now the service exits and systemd restarts it every 10 s, endlessly, with a message in the journal every time; at boot too the service can start before the module |
+| M4 | GitHub repo `darkodemic/gpwebcam`, CI (vet, test, package build on every push), GoReleaser on tag `v0.1.0`, first as a draft release | without it there is no public release; every step needs Darko's approval |
 
-## 2. Funkcije, po izboru
+## 2. Features, optional
 
-| # | Stavka | Procena | Napomena |
+| # | Item | Estimate | Note |
 |---|---|---|---|
-| F1 | `gpwebcam doctor`: modul i imena uređaja, prava na uređaj, ffmpeg i H.264 dekoder (Fedora `ffmpeg-free`), kamera na USB-u i njen režim, IPv4 adresa i NetworkManager "shared", firewall, stanje servisa | srednje | najveća korist za podršku: većina upstream prijava su pogrešno podešavanje (`upstream-issues-review.md` §2, stavka 13) |
-| F2 | Notifikacije na desktopu: kamera povezana, isključena, greška | malo uz `notify-send` (bez zavisnosti) | predajna beleška §10.1; user servis ima session D-Bus |
-| F3 | Snimanje: kopija H.264 streama u `.mkv` uz webcam, bez ponovnog kodiranja | srednje | predajna beleška §10.2 |
-| F4 | Man stranica `gpwebcam.1` | malo | Debian lintian daje upozorenje bez nje; za Debian kasnije svakako treba |
+| F1 | `gpwebcam doctor`: module and device names, device permissions, ffmpeg and the H.264 decoder (Fedora `ffmpeg-free`), the camera on USB and its mode, IPv4 address and NetworkManager "shared", firewall, service state | medium | the biggest benefit for support: most upstream reports are misconfiguration (`upstream-issues-review.md` §2, item 13) |
+| F2 | Desktop notifications: camera connected, disconnected, error | small with `notify-send` (no dependency) | handover note §10.1; the user service has the session D-Bus |
+| F3 | Recording: a copy of the H.264 stream into `.mkv` alongside the webcam, without re-encoding | medium | handover note §10.2 |
+| F4 | Man page `gpwebcam.1` | small | Debian lintian warns without it; Debian needs it later anyway |
 
-## 3. Optimizacije i dorada, po izboru
+## 3. Optimizations and polish, optional
 
-| # | Stavka | Procena | Napomena |
+| # | Item | Estimate | Note |
 |---|---|---|---|
-| O1 | Tiši log: ffmpeg upozorenja pri svakom startu (stream 2 i 3, `yuvj420p`), preimenovanje `eth0` → `enp...` kao info umesto lažnog "unplugged" | malo | čisto kozmetika, ali journal je ono što korisnik čita |
-| O2 | Izmeriti potrošnju procesora pri 1080p30, pa po potrebi hardversko dekodiranje (VAAPI) | merenje malo, VAAPI srednje | sada se dekodira softverski |
-| O3 | Dve aplikacije istovremeno: druga dobija "Device or resource busy" (provereno 2026-10-05 sa dva ffmpeg čitača) | nepoznato | može biti ograničenje v4l2loopback-a; prvo istražiti, inače zapisati kao ograničenje u README. Ishod: pravilo V4L2 API-ja; zapisano u README; drugi uređaj "GoPro 2" posle 0.1.0 (§4) |
-| O4 | Više stanja na zamenskoj slici: "kamera nađena, čeka mrežu", "firewall?" | malo | korisnik vidi šta se dešava bez journal-a |
+| O1 | Quieter log: ffmpeg warnings at every start (stream 2 and 3, `yuvj420p`), the rename `eth0` → `enp...` as info instead of a false "unplugged" | small | purely cosmetic, but the journal is what the user reads |
+| O2 | Measure CPU usage at 1080p30, then hardware decoding (VAAPI) if needed | measuring small, VAAPI medium | decoding is done in software now |
+| O3 | Two applications at once: the second gets "Device or resource busy" (verified 2026-10-05 with two ffmpeg readers) | unknown | may be a v4l2loopback limitation; investigate first, otherwise record it as a limitation in the README. Outcome: a V4L2 API rule; recorded in the README; a second device "GoPro 2" after 0.1.0 (§4) |
+| O4 | More states on the placeholder: "camera found, waiting for network", "firewall?" | small | the user sees what is happening without the journal |
 
-## 4. Posle 0.1.0
+## 4. After 0.1.0
 
-- 0.2.0: tray ikonica sa podešavanjima i snimanje (F3), `tray-and-recording.md`.
-- AUR: izvorni PKGBUILD `gpwebcam` (sa `optdepends`) i `gpwebcam-bin` preko GoReleaser `aurs` (`packaging-and-release.md` §6).
-- COPR za Fedoru; Debian ITP; RPM Fusion.
-- Više kamera istovremeno.
-- Drugi uređaj "GoPro 2" u koji `gpwebcam` piše iste frejmove, za dve aplikacije odjednom (npr. streaming); traži treći v4l2loopback uređaj u konfiguraciji modula.
-- RTSP kao alternativa za mreže sa firewall-om (direktno je dao isto kašnjenje, 0.18 s).
+- 0.2.0: tray icon with settings, and recording (F3), `tray-and-recording.md`.
+- AUR: a source PKGBUILD `gpwebcam` (with `optdepends`) and `gpwebcam-bin` through GoReleaser `aurs` (`packaging-and-release.md` §6).
+- COPR for Fedora; Debian ITP; RPM Fusion.
+- Several cameras at once.
+- A second device "GoPro 2" that `gpwebcam` writes the same frames into, for two applications at once (e.g. streaming); needs a third v4l2loopback device in the module config.
+- RTSP as an alternative for networks with a firewall (direct gave the same latency, 0.18 s).
 
-## 5. Gde smo i šta sledi
+## 5. Where we are and what is next
 
-- 2026-10-05: spisak napravljen posle commit-a `4934ca6`.
-- 2026-10-05: Darko izabrao F1, F2, F4 i O1 do O4; F3 posle 0.1.0. Pitanje uz O2: zašto hardversko dekodiranje nije podrazumevano kad postoji. Odgovor: treba da bude, ako (1) ne poveća kašnjenje, jer neki VAAPI drajveri drže više frejmova, a frejm ionako mora nazad u sistemsku memoriju zbog v4l2loopback-a, i (2) sam padne na softversko kad GPU ili drajver nisu dostupni (`-hwaccel auto` to radi). O2 meri procesor i kašnjenje sa i bez njega i na osnovu toga odlučuje podrazumevanu vrednost.
-- 2026-10-05, urađeno (testovi prolaze, i sa `-race`):
-  - M3: `gpwebcam run` čeka uređaj (provera na 2 s) umesto da izađe.
-  - O1: ffmpeg sa `-loglevel error`; njegove linije idu kroz `slog` sa oznakom `source=ffmpeg`, najviše 20 u minutu, uz broj preskočenih. Preimenovanje interfejsa se prepoznaje po tome što USB uređaj i dalje postoji (druga provera posle 300 ms, jer pri izvlačenju interfejs može nestati pre uređaja) i beleži se kao info.
-  - O4: sedam poruka na zamenskoj slici (nije povezana, čeka mrežu, pokreće se, nema videa, posle 3 puta "firewall?", ne odgovara, problem); sve provereno vizuelno na 1080p.
-  - F2: `internal/notify` preko `notify-send`, ista poruka najviše jednom u 30 s; `-notify=false` gasi. Na Darkovoj mašini server je Quickshell.
-  - F1: `gpwebcam doctor`: ffmpeg i H.264 dekoder, modul, uređaji, konfiguracija modula, pravo pisanja, servis, kamera (USB, interfejs, IPv4, ruta, HTTP info i status samo čitanjem), firewalld i ufw, notify-send. Izlaz 1 ako nešto padne.
-  - F4: `packaging/man/gpwebcam.1`, bez groff upozorenja; GoReleaser ga kompresuje (`gzip -n`) u `/usr/share/man/man1/` u sva tri paketa.
-  - O2: lokalni stream 1080p30 H.264 High, 6 Mb/s: softversko 13.7 % jednog jezgra i 71 ms, `-hwaccel vaapi` 9.5 % i 74 ms, `-hwaccel auto` (izabrao VAAPI na AMD-u) 8.7 % i 74 ms. Odluka: `-hwdec auto` podrazumevano, `-hwdec none` isključuje; posle dva uzastopna "nema videa" uz GPU, sesije prelaze na softversko do kraja rada.
-  - O3: istraženo u izvornom kodu v4l2loopback 0.15.4. Od 0.14 jedan čitač po uređaju: drugi pada na `VIDIOC_S_FMT` (`v4l2loopback.c:1143-1146`, i `REQBUFS` na `:1725-1728`), bez obzira na format; isto važi za UVC kamere i to je pravilo V4L2 API-ja (upstream #635, #310). Chrome radi `S_FMT` bez ponovnog pokušaja. Jedino rešenje je drugi uređaj ("GoPro 2") u koji `gpwebcam` piše iste frejmove; za sada zapisano u README kao ograničenje, a drugi uređaj čeka Darkovu odluku.
-- 2026-10-05: Darko: "GoPro 2" posle 0.1.0; ne vidi čest slučaj za dve aplikacije odjednom, osim možda za streaming.
-- 2026-10-05, M1 delimično: Darko instalirao Arch paket (`pacman -Ql` pokazuje svih 7 fajlova) i ponovo učitao modul bez restarta (`sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback`, modul nije koristio nijedan program). Konfiguracija iz paketa daje `/dev/video42` "GoPro" i `/dev/video2` "OBS Virtual Camera", `exclusive_caps=Y,Y`; `card_label` sa zarezom i razmakom se ispravno deli (rizik iz ADR 0005 otpada). `systemctl --user enable --now gpwebcam.service` radi; servis nađe uređaj po imenu i piše zamensku sliku; `gpwebcam doctor`: 0 problema, upozorenje samo da kamera nije priključena. Ostaje: servis pri prijavi posle restarta i Zoom sa paketom.
-- 2026-10-05, M2: Darko potvrdio da sa servisom iz paketa radi ceo test: kamera se sama nađe i pokrene, izvlačenje i vraćanje kabla rade, notifikacije stižu.
-- 2026-10-05, posle commit-a `a65f5ec`, Darkove dve ideje:
-  - Model u nazivu kamere: `card_label` se zadaje pri učitavanju modula i ne menja se bez root-a (novi uređaj), a uređaj postoji i bez kamere. Odluka: uređaj ostaje "GoPro"; model ("GoPro HERO13 Black", iz USB product string-a, očišćen jer dolazi sa uređaja) ide na zamensku sliku, u notifikacije i u log. Model van spiska proverenih (sada samo "HERO13 Black") se jednom prijavi u logu i notifikacijom, a `doctor` ga označi upozorenjem. README opisuje kako se stalni naziv postavlja kroz `/etc/modprobe.d` i `-device-label`.
-  - Tačkice: stanja koja čekaju (mreža, pokretanje, ponovni pokušaj) vrte ".", "..", "..." na 0.5 s; poruke o problemima stoje mirno. Razmaci umesto tačkica ne pomažu, jer drawtext ne računa razmake na kraju u `text_w` (tekst se pomerao 6 do 7 px po tačkici); zato se status centrira bez tačkica, a tačkice crtaju odmah iza izmerene desne ivice teksta, na istoj osnovnoj liniji (`y_align=baseline`, ffmpeg 6.1+). Čuva se jedna osnovna slika i traka redova po statusu i koraku: oko 12 MB umesto ranijih ~22 MB. Provereno uživo sa kamerom.
-  - Usput: `-hwaccel auto` prvo proba CUDA i na mašini bez NVIDIA drajvera upiše 3 linije greške pri svakom startu. Sada `-hwdec auto` jednom pri startu proba VAAPI uređaj (`-init_hw_device vaapi`, oko 50 ms) i koristi `-hwaccel vaapi` ili softversko. Eksplicitni `-hwaccel vaapi` ne pada sam na softversko kad uređaj ne radi (provereno), zato provera ide unapred.
-- 2026-10-05, posle commit-a `6dd7ee1`: kad nova sesija pošalje START manje od sekunde posle `exit`-a prethodne (restart servisa), kamera ponekad prijavi status 2, a ne šalje ništa; tada je watchdog vraćao sliku tek za oko 16 s. Ponovljen START ne pomaže, jer ga kamera u stanju streaminga ignoriše (1 od 4 brza restarta, slika posle 15.7 s). Ispravka: 3 s posle START-a bez ijednog frejma, sesija pošalje stop pa START dok ffmpeg i dalje sluša; watchdog od 6 s ostaje kao poslednja zaštita. Merenje sa 16 brzih restarta: 15 normalnih (slika za 4.4 s od pokretanja `gpwebcam run`), 1 neuspeh koji je ispravka vratila za 8.9 s bez watchdog-a.
-- 2026-10-05: commit `cbeceee` (brz restart). Pripremljeni `.github/workflows/ci.yml` (gofmt, vet, `go test -race` sa ffmpeg-om na Go 1.22 i najnovijem, snapshot build paketa kao artefakt) i `release.yml` (tag `v*` → GoReleaser 2.18.2 → draft release); akcije zakucane na commit (checkout v7.0.1, setup-go v7.0.0, goreleaser-action v7.2.3, upload-artifact v7.0.1, provereno preko GitHub API-ja); `actionlint` 1.7.12 sa `shellcheck` 0.11.0 bez primedbi. Paketi `.deb` i `.rpm` se testiraju u kontejnerima (Debian trixie, Ubuntu 24.04, Fedora, Arch).
-- M4, koraci (svaki uz Darkovo odobrenje): (1) GitHub repo `darkodemic/gpwebcam`; (2) `origin` i push `main`; (3) CI zelen; (4) anotiran tag `v0.1.0` i push taga; (5) Darko pregleda draft release i objavi ga.
-- 2026-10-05, M4 koraci 1 do 3: commit `9a11531`; privatan repo https://github.com/darkodemic/gpwebcam (Darko: prvo privatan, javan posle); push `main`. Prvi CI: "Test (Go stable)" prošao za 2 min; "Test (Go 1.22)" i "Build packages" dvaput otkazani posle 15 min bez runner-a ("The job was not acquired by Runner of type hosted even after multiple attempts"). Uzrok: GitHub Actions "major outage", incident od 21:09 UTC. Ponovno pokretanje čeka oporavak.
-- 2026-10-05, paketi u kontejnerima (Debian 13, Ubuntu 24.04, Fedora 44, Arch): instalacija, `version`, `help`, `doctor` i uklanjanje rade svuda; fajlovi root:root, 0755/0644. Nalazi i ispravke:
-  - Fedora `ffmpeg-free` ima samo `libopenh264`, ne ugrađeni `h264`; `doctor` to prijavi i predloži RPM Fusion.
-  - rpm je posle uklanjanja ostavljao prazne `/usr/share/doc/gpwebcam` i `/usr/share/licenses/gpwebcam`: dodati kao `type: dir`.
-  - lintian: `no-changelog` → `packaging/changelog.yml` (nFPM `changelog`, `release: "1"`); `statically-linked-binary` → GoReleaser `deb.lintian_overrides`; `maintainer-script-ignores-errors` → `set -e`. Ostaje samo `initial-upload-closes-no-bugs`.
-  - rpmlint: README i man stranica kao `type: doc`; changelog. Ostaju `statically-linked-binary` i `position-independent-executable-suggested` (statički build ostaje), a kod snapshot-a `incoherent-version-in-changelog`.
-  - namcap: `pacman -Qkk` je javljao razliku u vremenu za svaki fajl → `mtime: "{{ .CommitDate }}"`, sada 0 izmenjenih fajlova. Ostaju RELRO/PIE (statički build) i "owned by 0:0" (nFPM ne upisuje imena vlasnika; bezopasno).
-  - `doctor`: jasna poruka kad user systemd nije dostupan (sudo, kontejner) i kad `modprobe` ne postoji.
-  - Snapshot verzija je sada `0.0.1~dev.<commit>`, pa se u svakom menadžeru paketa sortira pre sledećeg izdanja.
-  - Poruka posle instalacije: reboot ili ponovno učitavanje samo ako je modul bio učitan pre instalacije (na Arch-u ga systemd hook učita pri instalaciji); dodat korak `gpwebcam doctor`.
-- 2026-10-05: commit `3b1cc56` push-ovan; CI zelen na sva tri posla posle oporavka GitHub Actions (23:35).
-- 2026-10-05: Darko pitao zašto Go nije u `mise.toml`. Bio je propust: globalni `go latest` je davao 1.26.8, a najnoviji je 1.27.1. Sada `mise.toml` zakucava Go 1.27.1 uz GoReleaser 2.18.2; `go.mod` ostaje `go 1.22` kao minimum. Sa go1.27.1 (kroz `mise exec`, jer shell sesije ima Go u PATH-u mimo `mise.toml`) `vet`, `go test -race` i build paketa prolaze, binarni fajl nosi go1.27.1. CI test i paketi i release workflow sada instaliraju alate iz `mise.toml` (`jdx/mise-action` v5.1.1, zakucan na commit); test na Go 1.22 ostaje preko `setup-go`.
-- 2026-10-06: Darko odlučio da tag ide pre restarta; ostatak M1 se proverava posle, a problem znači 0.1.1. Potpisan anotiran tag `v0.1.0` na `56797e8` (CI zelen na sva tri posla), push samo taga. Release workflow prošao za 49 s; draft ima `.deb`, `.rpm` i Arch paket za amd64 i arm64, dve `tar.gz` arhive i `checksums.txt`. Provereno: checksum amd64 arhive se slaže, binarni fajl prijavljuje `gpwebcam 0.1.0`. GoReleaser `changelog.sort: asc` slaže commit-e po abecedi naslova, a ne po vremenu, i sa punim hash-om; tekst release-a treba srediti pre objave, a podešavanje promeniti za sledeće izdanje.
-- Sledeće: Darko objavljuje draft; restart kad mu odgovara (servis pri prijavi, modul pri boot-u, Zoom sa paketom). Tray ikonica i snimanje su plan za 0.2.0 (`tray-and-recording.md`).
+- 2026-10-05: list made after commit `4934ca6`.
+- 2026-10-05: Darko chose F1, F2, F4 and O1 to O4; F3 after 0.1.0. Question with O2: why hardware decoding is not the default when it exists. Answer: it should be, if (1) it does not increase latency, because some VAAPI drivers hold more frames, and the frame has to go back to system memory anyway because of v4l2loopback, and (2) it falls back to software on its own when the GPU or the driver is not available (`-hwaccel auto` does that). O2 measures CPU and latency with and without it, and decides the default on that basis.
+- 2026-10-05, done (tests pass, also with `-race`):
+  - M3: `gpwebcam run` waits for the device (check every 2 s) instead of exiting.
+  - O1: ffmpeg with `-loglevel error`; its lines go through `slog` with the tag `source=ffmpeg`, at most 20 per minute, with the count of skipped ones. An interface rename is recognized by the USB device still existing (a second check after 300 ms, because on unplug the interface can disappear before the device) and is logged as info.
+  - O4: seven messages on the placeholder (not connected, waiting for network, starting, no video, after 3 times "firewall?", not responding, problem); all verified visually at 1080p.
+  - F2: `internal/notify` through `notify-send`, the same message at most once per 30 s; `-notify=false` turns it off. On the test machine the server is Quickshell.
+  - F1: `gpwebcam doctor`: ffmpeg and the H.264 decoder, module, devices, module config, write permission, service, camera (USB, interface, IPv4, route, HTTP info and status, read-only), firewalld and ufw, notify-send. Exit 1 if something fails.
+  - F4: `packaging/man/gpwebcam.1`, without groff warnings; GoReleaser compresses it (`gzip -n`) into `/usr/share/man/man1/` in all three packages.
+  - O2: local stream 1080p30 H.264 High, 6 Mb/s: software 13.7 % of one core and 71 ms, `-hwaccel vaapi` 9.5 % and 74 ms, `-hwaccel auto` (chose VAAPI on AMD) 8.7 % and 74 ms. Decision: `-hwdec auto` by default, `-hwdec none` turns it off; after two consecutive "no video" with the GPU, sessions switch to software for the rest of the run.
+  - O3: investigated in the v4l2loopback 0.15.4 source code. Since 0.14, one reader per device: the second fails on `VIDIOC_S_FMT` (`v4l2loopback.c:1143-1146`, and `REQBUFS` at `:1725-1728`), regardless of the format; the same holds for UVC cameras, and it is a V4L2 API rule (upstream #635, #310). Chrome does `S_FMT` without retrying. The only solution is a second device ("GoPro 2") that `gpwebcam` writes the same frames into; for now recorded in the README as a limitation, and the second device waits for Darko's decision.
+- 2026-10-05: Darko: "GoPro 2" after 0.1.0; he does not see a common case for two applications at once, except maybe for streaming.
+- 2026-10-05, M1 partly: Darko installed the Arch package (`pacman -Ql` shows all 7 files) and reloaded the module without a restart (`sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback`, no program was using the module). The config from the package gives `/dev/video42` "GoPro" and `/dev/video2` "OBS Virtual Camera", `exclusive_caps=Y,Y`; `card_label` with a comma and a space splits correctly (the risk from ADR 0005 is gone). `systemctl --user enable --now gpwebcam.service` works; the service finds the device by name and writes the placeholder; `gpwebcam doctor`: 0 problems, only a warning that the camera is not plugged in. Left: the service at login after a restart, and Zoom with the package.
+- 2026-10-05, M2: Darko confirmed that the whole test works with the service from the package: the camera is found and started on its own, unplugging and plugging back the cable work, notifications arrive.
+- 2026-10-05, after commit `a65f5ec`, Darko's two ideas:
+  - The model in the camera name: `card_label` is set when the module loads and does not change without root (new device), and the device exists without the camera too. Decision: the device stays "GoPro"; the model ("GoPro HERO13 Black", from the USB product string, sanitized because it comes from the device) goes onto the placeholder, into the notifications and into the log. A model outside the list of verified ones (now only "HERO13 Black") is reported once in the log and with a notification, and `doctor` flags it with a warning. The README describes how to set a permanent name through `/etc/modprobe.d` and `-device-label`.
+  - Dots: waiting states (network, starting, retry) cycle ".", "..", "..." every 0.5 s; problem messages stay still. Spaces in place of the dots do not help, because drawtext does not count trailing spaces in `text_w` (the text moved 6 to 7 px per dot); so the status is centered without the dots, and the dots are drawn right after the measured right edge of the text, on the same baseline (`y_align=baseline`, ffmpeg 6.1+). One base image is kept, plus a strip of rows per status and step: about 12 MB instead of the earlier ~22 MB. Verified live with the camera.
+  - Along the way: `-hwaccel auto` tries CUDA first, and on a machine without the NVIDIA driver it writes 3 error lines at every start. Now `-hwdec auto` probes the VAAPI device once at start (`-init_hw_device vaapi`, about 50 ms) and uses `-hwaccel vaapi` or software. An explicit `-hwaccel vaapi` does not fall back to software on its own when the device does not work (verified), so the check runs up front.
+- 2026-10-05, after commit `6dd7ee1`: when a new session sends START less than a second after the previous one's `exit` (service restart), the camera sometimes reports status 2 but sends nothing; the watchdog then brought the picture back only after about 16 s. A repeated START does not help, because the camera ignores it in the streaming state (1 of 4 quick restarts, picture after 15.7 s). Fix: 3 s after START without a single frame, the session sends stop then START while ffmpeg is still listening; the 6 s watchdog stays as the last safeguard. Measurement with 16 quick restarts: 15 normal (picture 4.4 s after starting `gpwebcam run`), 1 failure that the fix recovered in 8.9 s without the watchdog.
+- 2026-10-05: commit `cbeceee` (quick restart). Prepared `.github/workflows/ci.yml` (gofmt, vet, `go test -race` with ffmpeg on Go 1.22 and the latest, snapshot package build as an artifact) and `release.yml` (tag `v*` → GoReleaser 2.18.2 → draft release); actions pinned to a commit (checkout v7.0.1, setup-go v7.0.0, goreleaser-action v7.2.3, upload-artifact v7.0.1, verified through the GitHub API); `actionlint` 1.7.12 with `shellcheck` 0.11.0 without findings. The `.deb` and `.rpm` packages are tested in containers (Debian trixie, Ubuntu 24.04, Fedora, Arch).
+- M4, steps (each with Darko's approval): (1) GitHub repo `darkodemic/gpwebcam`; (2) `origin` and push `main`; (3) CI green; (4) annotated tag `v0.1.0` and push of the tag; (5) Darko reviews the draft release and publishes it.
+- 2026-10-05, M4 steps 1 to 3: commit `9a11531`; private repo https://github.com/darkodemic/gpwebcam (Darko: private first, public later); push `main`. First CI: "Test (Go stable)" passed in 2 min; "Test (Go 1.22)" and "Build packages" canceled twice after 15 min without a runner ("The job was not acquired by Runner of type hosted even after multiple attempts"). Cause: GitHub Actions "major outage", incident since 21:09 UTC. The rerun waits for the recovery.
+- 2026-10-05, packages in containers (Debian 13, Ubuntu 24.04, Fedora 44, Arch): install, `version`, `help`, `doctor` and removal work everywhere; files root:root, 0755/0644. Findings and fixes:
+  - Fedora `ffmpeg-free` has only `libopenh264`, not the built-in `h264`; `doctor` reports that and suggests RPM Fusion.
+  - After removal, rpm left empty `/usr/share/doc/gpwebcam` and `/usr/share/licenses/gpwebcam`: added as `type: dir`.
+  - lintian: `no-changelog` → `packaging/changelog.yml` (nFPM `changelog`, `release: "1"`); `statically-linked-binary` → GoReleaser `deb.lintian_overrides`; `maintainer-script-ignores-errors` → `set -e`. Only `initial-upload-closes-no-bugs` remains.
+  - rpmlint: README and man page as `type: doc`; changelog. `statically-linked-binary` and `position-independent-executable-suggested` remain (the static build stays), and for a snapshot `incoherent-version-in-changelog`.
+  - namcap: `pacman -Qkk` reported a time difference for every file → `mtime: "{{ .CommitDate }}"`, now 0 modified files. RELRO/PIE (static build) and "owned by 0:0" remain (nFPM does not write owner names; harmless).
+  - `doctor`: a clear message when user systemd is not available (sudo, container) and when `modprobe` does not exist.
+  - The snapshot version is now `0.0.1~dev.<commit>`, so in every package manager it sorts before the next release.
+  - Message after install: reboot or reload only if the module was loaded before the install (on Arch the systemd hook loads it during the install); added the step `gpwebcam doctor`.
+- 2026-10-05: commit `3b1cc56` pushed; CI green on all three jobs after GitHub Actions recovered (23:35).
+- 2026-10-05: Darko asked why Go is not in `mise.toml`. It was an oversight: the global `go latest` gave 1.26.8, and the newest is 1.27.1. Now `mise.toml` pins Go 1.27.1 along with GoReleaser 2.18.2; `go.mod` stays at `go 1.22` as the minimum. With go1.27.1 (through `mise exec`, because the session's shell has Go in PATH outside `mise.toml`), `vet`, `go test -race` and the package build pass, and the binary carries go1.27.1. The CI test and package jobs and the release workflow now install the tools from `mise.toml` (`jdx/mise-action` v5.1.1, pinned to a commit); the test on Go 1.22 stays on `setup-go`.
+- 2026-10-06: Darko decided that the tag goes before the restart; the rest of M1 is checked afterwards, and a problem means 0.1.1. Signed annotated tag `v0.1.0` on `56797e8` (CI green on all three jobs), push of the tag only. The release workflow passed in 49 s; the draft has the `.deb`, `.rpm` and Arch packages for amd64 and arm64, two `tar.gz` archives and `checksums.txt`. Verified: the checksum of the amd64 archive matches, the binary reports `gpwebcam 0.1.0`. GoReleaser `changelog.sort: asc` orders commits alphabetically by title, not by time, and with the full hash; the release text needs cleaning up before publishing, and the setting needs changing for the next release.
+- Next: Darko publishes the draft; restart when it suits him (service at login, module at boot, Zoom with the package). The tray icon and recording are the plan for 0.2.0 (`tray-and-recording.md`).

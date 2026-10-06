@@ -1,98 +1,98 @@
-# Open GoPro webcam API za HERO13 Black
+# Open GoPro webcam API for HERO13 Black
 
-- **Status:** Završeno 2026-09-29. Na osnovu ovoga je doneta odluka u ADR 0002 (Open GoPro HTTP API za upravljanje kamerom). Na HERO13 Black sa firmverom 02.10 potvrđeno 2026-10-05: endpoint-i na portu 8080, adresa iz serijskog broja, quirk sa Idle posle priključenja i NCM (`first-slice-gw-start.md` §7.1).
+- **Status:** Done 2026-09-29. The decision in ADR 0002 (Open GoPro HTTP API for camera control) was made on the basis of this. Confirmed on HERO13 Black with firmware 02.10 on 2026-10-05: the endpoints on port 8080, the address from the serial number, the Idle quirk after plugging in, and NCM (`first-slice-gw-start.md` §7.1).
 - **Date:** 2026-09-29
 - **Owner:** Darko
-- **Related:** ADR 0002 (Open GoPro HTTP API za upravljanje kamerom); `upstream-issues-review.md`; `first-slice-gw-start.md`
+- **Related:** ADR 0002 (Open GoPro HTTP API for camera control); `upstream-issues-review.md`; `first-slice-gw-start.md`
 
-## 1. Izvori
+## 1. Sources
 
-Pročitano 2026-09-29:
+Read 2026-09-29:
 
-- **[SPEC]** Open GoPro HTTP API 2.0 (OpenAPI 3.1.0), build sa `gh-pages` grane repoa `gopro/OpenGoPro`, commit `616bfb8085` od 2026-06-08. Stranica: https://gopro.github.io/OpenGoPro/http, izvor: `https://raw.githubusercontent.com/gopro/OpenGoPro/gh-pages/http/openapi.json`.
-- **[SPEC-2023]** i **[SPEC-2022]**: arhivirane markdown verzije iste specifikacije na web.archive.org (2023-12-02 i 2022-11-26). Neke stvari kažu jasnije od trenutne.
+- **[SPEC]** Open GoPro HTTP API 2.0 (OpenAPI 3.1.0), build from the `gh-pages` branch of the `gopro/OpenGoPro` repo, commit `616bfb8085` of 2026-06-08. Page: https://gopro.github.io/OpenGoPro/http, source: `https://raw.githubusercontent.com/gopro/OpenGoPro/gh-pages/http/openapi.json`.
+- **[SPEC-2023]** and **[SPEC-2022]**: archived markdown versions of the same specification on web.archive.org (2023-12-02 and 2022-11-26). They state some things more clearly than the current one.
 - **[FAQ]**: https://gopro.github.io/OpenGoPro/docs/faq
-- **[SDK]**: GoPro-ov Python SDK i demo programi u istom repou. Čitano samo zbog ponašanja, kod se ne prenosi.
-- **[ISSUE]**: issue-i u `gopro/OpenGoPro`.
+- **[SDK]**: GoPro's Python SDK and demo programs in the same repo. Read only for behavior; no code is carried over.
+- **[ISSUE]**: issues in `gopro/OpenGoPro`.
 
-## 2. Endpoint-i
+## 2. Endpoints
 
-Svi su `GET` na `http://172.2X.1YZ.51:8080`. Preko USB-a nema autentifikacije ni obaveznih zaglavlja [SPEC].
+All are `GET` on `http://172.2X.1YZ.51:8080`. Over USB there is no authentication and there are no required headers [SPEC].
 
-| Endpoint | Parametri | Odgovor | Modeli |
+| Endpoint | Parameters | Response | Models |
 |---|---|---|---|
-| `/gopro/webcam/start` | `res`, `fov`, `port` (podrazumevano 8554), `protocol` (`TS` ili `RTSP`) | 200 `{}` | HERO13 Black |
+| `/gopro/webcam/start` | `res`, `fov`, `port` (default 8554), `protocol` (`TS` or `RTSP`) | 200 `{}` | HERO13 Black |
 | `/gopro/webcam/stop` | | 200 `{}` | HERO13 Black |
 | `/gopro/webcam/exit` | | 200 `{}` | HERO13 Black |
 | `/gopro/webcam/preview` | | 200 `{}` | HERO13 Black |
 | `/gopro/webcam/status` | | `{"status":N,"error":N}` | HERO13 Black |
 | `/gopro/webcam/version` | | `{"version":N,"max_lens_support":bool,"usb_3_1_compatible":bool}` | HERO13 Black |
-| `/gopro/camera/control/wired_usb` | `p` = 0 ili 1 | 200 `{}` | HERO10 do HERO13 |
-| `/gopro/camera/keep_alive` | | 200 `{}` | HERO9 do HERO13 |
+| `/gopro/camera/control/wired_usb` | `p` = 0 or 1 | 200 `{}` | HERO10 to HERO13 |
+| `/gopro/camera/keep_alive` | | 200 `{}` | HERO9 to HERO13 |
 
-- Build iz juna 2026 za webcam navodi samo HERO13 Black; build iz aprila 2026 navodio je i HERO9 do HERO12, MAX 2 i LIT HERO.
-- Redosled parametara je bitan: "HTTP command arguments must be given in the order outlined" [SPEC-2023], primer `?res=12&fov=0&port=8556&protocol=RTSP`. Go-ov `url.Values.Encode()` sortira ključeve, pa `gw` sklapa upit ručno.
-- Specifikacija za start, stop, exit i preview navodi prazan objekat, ali kamere vraćaju i `{"status":N,"error":N}`: SDK tako parsira svaki webcam odgovor, a HERO13 u [ISSUE #818] vraća `{"status":4,"error":7}`. Zato `gw` telo tretira kao opcioni JSON i proverava `error` kad postoji.
-- Stari `/gp/gpWebcam/...` ne postoji ni u jednoj verziji specifikacije, FAQ-u ni issue-ima u `gopro/OpenGoPro`. Po upstream issue-ima radi na HERO12 i HERO13 (`upstream-issues-review.md` §1.1), ali je nedokumentovan.
+- The June 2026 build lists only HERO13 Black for webcam; the April 2026 build also listed HERO9 to HERO12, MAX 2 and LIT HERO.
+- Parameter order matters: "HTTP command arguments must be given in the order outlined" [SPEC-2023], example `?res=12&fov=0&port=8556&protocol=RTSP`. Go's `url.Values.Encode()` sorts the keys, so `gw` builds the query by hand.
+- For start, stop, exit and preview the specification gives an empty object, but cameras also return `{"status":N,"error":N}`: the SDK parses every webcam response that way, and the HERO13 in [ISSUE #818] returns `{"status":4,"error":7}`. So `gw` treats the body as optional JSON and checks `error` when it is present.
+- The old `/gp/gpWebcam/...` does not exist in any version of the specification, in the FAQ, or in the issues in `gopro/OpenGoPro`. According to upstream issues it works on HERO12 and HERO13 (`upstream-issues-review.md` §1.1), but it is undocumented.
 
-## 3. Kodovi
+## 3. Codes
 
-**Rezolucija (`res`)** [SPEC]: 4 = 480p (samo HERO9 i HERO10), 7 = 720p, 12 = 1080p. HERO13 nije u ovoj tabeli ni u jednoj verziji, ali FAQ za "USB: Webcam" navodi 720p i 1080p, a SDK koristi iste kodove. Bez parametra važi 1080p [SPEC-2023].
+**Resolution (`res`)** [SPEC]: 4 = 480p (HERO9 and HERO10 only), 7 = 720p, 12 = 1080p. HERO13 is not in this table in any version, but the FAQ for "USB: Webcam" lists 720p and 1080p, and the SDK uses the same codes. Without the parameter, 1080p applies [SPEC-2023].
 
-**FOV (`fov`)** [SPEC, setting 43 "Webcam Digital Lenses", HERO13 naveden izričito]: 0 wide, 2 narrow, 3 superview, 4 linear. Bez parametra važi poslednji korišćen, a ako ga nema, wide [SPEC-2023].
+**FOV (`fov`)** [SPEC, setting 43 "Webcam Digital Lenses", HERO13 listed explicitly]: 0 wide, 2 narrow, 3 superview, 4 linear. Without the parameter, the last one used applies, and if there is none, wide [SPEC-2023].
 
-**`port`**: podrazumevano 8554; ne radi na HERO9, HERO10 i HERO11 Mini. Sopstveni port važi samo za TS; RTSP je uvek na 554 [SPEC-2023].
+**`port`**: default 8554; does not work on HERO9, HERO10 and HERO11 Mini. A custom port applies only to TS; RTSP is always on 554 [SPEC-2023].
 
-**`protocol`**: `TS` (podrazumevano) ili `RTSP`; ne radi na HERO9 do HERO11. Sa RTSP-om kamera je server na `rtsp://<kamera>:554/live` [SPEC, ISSUE #745].
+**`protocol`**: `TS` (default) or `RTSP`; does not work on HERO9 to HERO11. With RTSP the camera is the server at `rtsp://<camera>:554/live` [SPEC, ISSUE #745].
 
-**`status`** [SPEC]: 0 Off, 1 Idle, 2 High Power Preview, 3 Low Power Preview, 4 Status is unavailable. Kod 4 postoji u tabeli, ali ne u enum-u šeme; HERO13 ga vraća [ISSUE #810, #818].
+**`status`** [SPEC]: 0 Off, 1 Idle, 2 High Power Preview, 3 Low Power Preview, 4 Status is unavailable. Code 4 is in the table but not in the schema's enum; HERO13 returns it [ISSUE #810, #818].
 
 **`error`** [SPEC]: 0 None, 1 Set Preset, 2 Set Window Size, 3 Exec Stream, 4 Shutter, 5 Com timeout, 6 Invalid param, 7 Unavailable, 8 Exit.
 
 ## 4. State machine
 
-Po dijagramu iz specifikacije (https://gopro.github.io/OpenGoPro/assets/images/webcam.png):
+Following the diagram in the specification (https://gopro.github.io/OpenGoPro/assets/images/webcam.png):
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ready : USB priključen, wired USB control isključen
-    ready : READY (status 0 Off ili 1 Idle)
+    [*] --> ready : USB plugged in, wired USB control off
+    ready : READY (status 0 Off or 1 Idle)
     high : High Power Preview (status 2)
     low : Low Power Preview (status 3)
     ready --> high : start
     ready --> low : preview
     high --> low : preview
     low --> high : start
-    high --> ready : stop ili exit
-    low --> ready : stop ili exit
+    high --> ready : stop or exit
+    low --> ready : stop or exit
 ```
 
-- Start važi iz READY i iz oba preview stanja; ponovljen start u High Power Preview ostaje tu.
-- Stop zaustavi stream, a kamera ostaje u webcam režimu. Exit zaustavi stream i izađe iz webcam režima [SPEC-2023].
-- Hypersmooth (setting 135) se menja samo u READY sa statusom Off, a do toga se stiže preko Exit ili ponovnim priključenjem kabla [SPEC].
-- Poznata greška na svim kamerama: posle novog USB priključenja status se prijavi kao Idle umesto Off [FAQ]. GoPro kao zaobilaznicu predlaže start pa odmah stop.
-- SDK pre starta pročita status i pošalje stop ako kamera nije u Off ili Idle, pa start i čitanje statusa svake sekunde. Za kraj pošalje stop, sačeka Off ili Idle, pa exit.
+- Start is valid from READY and from both preview states; a repeated start in High Power Preview stays there.
+- Stop stops the stream, and the camera stays in webcam mode. Exit stops the stream and leaves webcam mode [SPEC-2023].
+- Hypersmooth (setting 135) can be changed only in READY with status Off, which is reached through Exit or by plugging the cable in again [SPEC].
+- Known bug on all cameras: after a new USB connection the status is reported as Idle instead of Off [FAQ]. As a workaround GoPro suggests start and then stop right away.
+- Before start the SDK reads the status and sends stop if the camera is not in Off or Idle, then start, and reads the status every second. To finish, it sends stop, waits for Off or Idle, then exit.
 
-## 5. Preduslovi i održavanje veze
+## 5. Prerequisites and keeping the connection alive
 
-- **Wired USB control mora biti isključen** pre webcam komandi preko USB-a: `wired_usb?p=0`. Trenutna specifikacija kaže "should", a [SPEC-2022] "must". Opšte USB uputstvo za druge funkcije traži `p=1`, pa to ne treba mešati. GoPro-ov demo za više kamera šalje `p=0` na početku.
-- Status 115 je "USB Connected", a status 116 "USB Controlled"; oba se čitaju preko `/gopro/camera/state`.
-- **Keep-alive:** "It is necessary to periodically send a keep-alive"; preporuka je `GET /gopro/camera/keep_alive` na svake 3 s [SPEC]. Starije verzije su tražile bar jednom u 120 s. Kamera zaspi kad isteknu i Auto Power Down (setting 59) i keep-alive tajmer.
-- Pre komandi treba sačekati da se ugase System Busy (status 8) i Encoding (status 10) [SPEC]. U prvom preseku se to ne proverava.
-- MTP na hostu: na HERO10 i HERO11 automatsko montiranje ili demontiranje preko MTP-a na Ubuntu-u ostavljalo je USB kontrolu u pola, i HTTP je vraćao 500. Pomagalo je `wired_usb` p=0 pa p=1 ili ponovno priključenje [ISSUE #184]. Na Linuxu to može da izazove gvfs.
+- **Wired USB control must be off** before webcam commands over USB: `wired_usb?p=0`. The current specification says "should", and [SPEC-2022] says "must". The general USB guide for other features asks for `p=1`, so the two must not be mixed up. GoPro's multi-camera demo sends `p=0` at the start.
+- Status 115 is "USB Connected", and status 116 is "USB Controlled"; both are read through `/gopro/camera/state`.
+- **Keep-alive:** "It is necessary to periodically send a keep-alive"; the recommendation is `GET /gopro/camera/keep_alive` every 3 s [SPEC]. Older versions asked for at least once every 120 s. The camera goes to sleep when both Auto Power Down (setting 59) and the keep-alive timer expire.
+- Before commands, wait until System Busy (status 8) and Encoding (status 10) clear [SPEC]. The first slice does not check this.
+- MTP on the host: on HERO10 and HERO11, automatic mounting or unmounting over MTP on Ubuntu left USB control half set up, and HTTP returned 500. What helped was `wired_usb` p=0 then p=1, or plugging in again [ISSUE #184]. On Linux gvfs can cause this.
 
-## 6. Mreža i stream
+## 6. Network and stream
 
-- Adresa kamere je `172.2X.1YZ.51`, gde je XYZ poslednje tri cifre serijskog broja; primer: serijski `C0000123456789` daje `172.27.189.51` [SPEC]. Serijski broj je na nalepnici ispod poklopca baterije i u Preferences → About → Camera Info.
-- mDNS `_gopro-web` postoji, ali HERO13 v01.10.00 ga ne oglašava [FAQ].
-- USB traži NCM [SPEC], pa je na hostu verovatno drajver `cdc_ncm`. Šta host dobija specifikacija ne kaže; GoPro-ov C++ demo traži lokalnu adresu `172.20–29.x.50–70` i menja poslednji oktet u `.51`.
-- HTTP je na portu **8080**. Port 80, koji koristi stari alat, specifikacija ne pominje.
-- Start "starts high-res stream to the IP address of caller" [SPEC-2023]: unicast MPEG-TS preko UDP-a na adresu sa koje je stigao HTTP zahtev. Zato HTTP klijent i ffmpeg moraju da koriste istu adresu hosta na GoPro linku.
-- Kodek je AVC/H.264 [SPEC]. FAQ za USB webcam: 720p ili 1080p, 30 fps, oko 6 Mbps, bez zvuka i stabilizacije, najmanje kašnjenje 210 ms, neograničeno trajanje na spoljnom napajanju. FAQ preporučuje `-fflags nobuffer`.
+- The camera's address is `172.2X.1YZ.51`, where XYZ are the last three digits of the serial number; example: serial `C0000123456789` gives `172.27.189.51` [SPEC]. The serial number is on the sticker under the battery door and in Preferences → About → Camera Info.
+- mDNS `_gopro-web` exists, but HERO13 v01.10.00 does not advertise it [FAQ].
+- USB requires NCM [SPEC], so the driver on the host is probably `cdc_ncm`. The specification does not say what the host gets; GoPro's C++ demo looks for a local address `172.20–29.x.50–70` and changes the last octet to `.51`.
+- HTTP is on port **8080**. The specification does not mention port 80, which the old tool uses.
+- Start "starts high-res stream to the IP address of caller" [SPEC-2023]: unicast MPEG-TS over UDP to the address the HTTP request came from. So the HTTP client and ffmpeg must use the same host address on the GoPro link.
+- The codec is AVC/H.264 [SPEC]. FAQ for USB webcam: 720p or 1080p, 30 fps, about 6 Mbps, no audio and no stabilization, minimum latency 210 ms, unlimited duration on external power. The FAQ recommends `-fflags nobuffer`.
 
-## 7. Poznati problemi za HERO12 i HERO13
+## 7. Known problems for HERO12 and HERO13
 
-- HERO13 v01.10.00: webcam start, exit i preview uvek vraćaju HTTP 500 [FAQ]. GoPro saradnik u [ISSUE #603]: "known issue for Hero 13 initial firmware but it should be fixed now". Minimalni firmver za HERO13 u specifikaciji je v01.10.00; Darkov 02.10 je noviji.
-- [ISSUE #818], HERO13 preko USB-a, wired control isključen: status 4, error 7. Nema odgovora GoPro-a.
-- [ISSUE #504], HERO12: nasumičan HTTP 500 i zaključan HTTP server do ponovnog priključenja; prijavljeno kao rešeno u novijem firmveru.
-- [ISSUE #899], HERO12: Hypersmooth se vrati na 0 posle webcam starta.
+- HERO13 v01.10.00: webcam start, exit and preview always return HTTP 500 [FAQ]. A GoPro collaborator in [ISSUE #603]: "known issue for Hero 13 initial firmware but it should be fixed now". The minimum firmware for HERO13 in the specification is v01.10.00; Darko's 02.10 is newer.
+- [ISSUE #818], HERO13 over USB, wired control off: status 4, error 7. No answer from GoPro.
+- [ISSUE #504], HERO12: random HTTP 500 and an HTTP server locked up until the cable is plugged in again; reported as fixed in newer firmware.
+- [ISSUE #899], HERO12: Hypersmooth goes back to 0 after a webcam start.

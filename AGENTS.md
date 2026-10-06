@@ -8,7 +8,7 @@ It is a from-scratch rewrite. The old bash tool in `~/Projects/gopro_as_webcam_o
 
 ## Start here
 
-1. `docs/plans-and-decisions/gopro-fork-review-and-handover.md` covers what we know about the camera, the review findings on the old tool, the design principles, open decisions, and "Gde smo i šta sledi" (current state and next steps). Read it at the start of a session.
+1. `docs/plans-and-decisions/gopro-fork-review-and-handover.md` covers what we know about the camera, the review findings on the old tool, the design principles, open decisions, and "Where we are and what is next" (current state and next steps). Read it at the start of a session.
 2. The numbered files in `docs/plans-and-decisions/` are the decisions: Go (0001), the Open GoPro API (0002), gpwebcam owning the loopback device as a user service (0003), the Apache-2.0 license (0004), the name and packaging (0005).
 3. `packaging-and-release.md` holds the distro packaging rules and the release path.
 
@@ -30,4 +30,4 @@ When work changes what a plan says, update that plan in the same session.
 - `README.md` is for users: install, setup, use, troubleshooting.
 - `CONTRIBUTING.md` is for contributors: tools, layout, build, tests, packages, code rules.
 - Keep both in sync with the code: flags, messages, paths and package layout.
-- Design documents in `docs/plans-and-decisions/` are written in Serbian (ekavica); code, comments, README and CONTRIBUTING are in English.
+- Everything in the repository is in English: design documents in `docs/plans-and-decisions/`, code, comments, README and CONTRIBUTING.

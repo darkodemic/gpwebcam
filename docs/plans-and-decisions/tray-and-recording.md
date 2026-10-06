@@ -1,217 +1,217 @@
-# Tray ikonica i snimanje (0.2.0)
+# Tray icon and recording (0.2.0)
 
-- **Status:** Prihvaćen 2026-10-06: tray preko `fyne.io/systray`, od 2026-10-06 iz forka `darkodemic/systray` (§3.2), u istom procesu kao `gpwebcam run` (§3), preseci redom tray, sopstveni UDP prijem, snimanje (§7). Cilj je izdanje 0.2.0.
+- **Status:** Accepted 2026-10-06: tray through `fyne.io/systray`, since 2026-10-06 from the fork `darkodemic/systray` (§3.2), in the same process as `gpwebcam run` (§3), slices in order: tray, own UDP receiver, recording (§7). The target is release 0.2.0.
 - **Date:** 2026-10-06
 - **Owner:** Darko
-- **Related:** `release-0.1.0.md` §2 (F3), §4; predajna beleška §10.1 (notifikacije), §10.2 (snimanje); `first-slice-gw-start.md` §8 (watchdog za pakete); ADR 0001 (Go kao jezik implementacije); ADR 0003 (gpwebcam drži uređaj kao user servis)
+- **Related:** `release-0.1.0.md` §2 (F3), §4; handover note §10.1 (notifications), §10.2 (recording); `first-slice-gw-start.md` §8 (packet watchdog); ADR 0001 (Go as the implementation language); ADR 0003 (gpwebcam owns the device as a user service)
 
-## 1. Obim
+## 1. Scope
 
-Darkov predlog od 2026-10-06: dok servis radi, u system tray-u stoji ikonica. Iz nje se podešava webcam režim i pokreće snimanje. Ko ne želi ikonicu, može da je ugasi.
+Darko's proposal of 2026-10-06: while the service runs, an icon sits in the system tray. It is used to set the webcam mode and to start recording. Anyone who does not want the icon can turn it off.
 
-U obimu:
+In scope:
 
-- tray ikonica sa menijem i stanjem kamere;
-- podešavanja iz menija koja se pamte između pokretanja;
-- snimanje H.264 streama kamere u fajl, bez ponovnog kodiranja (F3 iz `release-0.1.0.md`).
+- a tray icon with a menu and the camera state;
+- settings from the menu that are remembered between runs;
+- recording of the camera's H.264 stream to a file, without re-encoding (F3 from `release-0.1.0.md`).
 
-Van obima za 0.2.0: prozor sa podešavanjima, snimanje na microSD karticu kamere, zvuk (webcam režim ga nema), više kamera.
+Out of scope for 0.2.0: a settings window, recording to the camera's microSD card, audio (webcam mode has none), multiple cameras.
 
-## 2. Provereno
+## 2. Verified
 
-| Činjenica | Izvor |
+| Fact | Source |
 |---|---|
-| Quickshell na Darkovoj mašini je tray host i watcher (`org.kde.StatusNotifierWatcher`); registrovano je više ikonica drugih aplikacija | `busctl --user`, 2026-10-06 |
-| GNOME bez AppIndicator ekstenzije ne prikazuje StatusNotifierItem ikonice; Ubuntu je ima uključenu, Fedora nema | opšte poznato, nije provereno u kontejneru |
-| User servis ima `DBUS_SESSION_BUS_ADDRESS` (`unix:path=/run/user/1000/bus`) i `XDG_RUNTIME_DIR` | `systemctl --user show-environment`, 2026-10-06 |
-| Veličina frejma u `/dev/video42` određuje se jednom, pri pokretanju `gpwebcam run`, iz `-res`; zamenska slika i stream se skaliraju na nju | `cmd/gpwebcam/serve.go:132`, `internal/stream/stream.go:119` |
-| ffmpeg sam sluša UDP na IP adresi hosta na GoPro interfejsu; kamera šalje unicast na jedan port | `internal/stream/stream.go:84`; predajna beleška §2 |
-| Unit ima `ProtectHome=read-only` i `ProtectSystem=strict`, pa servis sada ne može da piše u home | `packaging/systemd/gpwebcam.service` |
-| `xdg-user-dir VIDEOS` na Darkovoj mašini vraća `/home/user`, jer XDG folder za video nije podešen | 2026-10-06 |
-| `fyne.io/systray` v1.12.2 traži Go 1.19 i zavisi od `godbus/dbus/v5` i `golang.org/x/sys`; `godbus/dbus/v5` v5.2.2 traži Go 1.20. Oba se slažu sa `go 1.22` u `go.mod` | proxy.golang.org, 2026-10-06 |
-| `fyne.io/systray` v1.12.2: cgo samo u `systray_darwin.go`; Linux deo (`systray_unix.go`) je čist Go preko D-Bus-a. Prati `NameOwnerChanged` za `org.kde.StatusNotifierWatcher` i ponovo se registruje kad se watcher pojavi. Ima `RunWithExternalLoop` za program koji već ima svoju petlju. Stanje drži u globalnoj promenljivoj, a greške piše kroz standardni `log` | izvorni kod v1.12.2 sa proxy.golang.org, 2026-10-06 |
-| `fyne.io/systray` nema radio stavke ni u v1.12.2 ni na `master`-u (`528cad2`): na Linuxu šalje samo dbusmenu `toggle-type` `checkmark`, iako spec ima i `radio`. Nema ni issue-a ni PR-a za to, ni u `fyne-io/systray` ni u `getlantern/systray` | izvorni kod i `gh search`, 2026-10-06 |
-| `fyne-io/systray` je GitHub fork `getlantern/systray`: 186 commit-a ispred, 17 iza. Tih 17 su iz 2021–2023, uglavnom GTK i libayatana-appindicator, koje je fyne namerno izbacio, plus dve Windows ispravke za podmenije. `getlantern/systray` je poslednji put menjan 2024-07-03, `fyne-io/systray` 2026-08 | GitHub compare API, 2026-10-06 |
+| Quickshell on the test machine is the tray host and watcher (`org.kde.StatusNotifierWatcher`), with several icons of other applications registered | `busctl --user`, 2026-10-06 |
+| GNOME without the AppIndicator extension does not show StatusNotifierItem icons; Ubuntu has it enabled, Fedora does not | common knowledge, not verified in a container |
+| The user service has `DBUS_SESSION_BUS_ADDRESS` (`unix:path=/run/user/1000/bus`) and `XDG_RUNTIME_DIR` | `systemctl --user show-environment`, 2026-10-06 |
+| The frame size in `/dev/video42` is set once, when `gpwebcam run` starts, from `-res`; the placeholder and the stream are scaled to it | `cmd/gpwebcam/serve.go:132`, `internal/stream/stream.go:119` |
+| ffmpeg itself listens for UDP on the host's IP address on the GoPro interface; the camera sends unicast to one port | `internal/stream/stream.go:84`; handover note §2 |
+| The unit has `ProtectHome=read-only` and `ProtectSystem=strict`, so the service currently cannot write to the home directory | `packaging/systemd/gpwebcam.service` |
+| `xdg-user-dir VIDEOS` on the test machine returns the home folder, because the XDG videos folder is not set | 2026-10-06 |
+| `fyne.io/systray` v1.12.2 requires Go 1.19 and depends on `godbus/dbus/v5` and `golang.org/x/sys`; `godbus/dbus/v5` v5.2.2 requires Go 1.20. Both fit `go 1.22` in `go.mod` | proxy.golang.org, 2026-10-06 |
+| `fyne.io/systray` v1.12.2: cgo only in `systray_darwin.go`; the Linux part (`systray_unix.go`) is pure Go over D-Bus. It watches `NameOwnerChanged` for `org.kde.StatusNotifierWatcher` and registers again when the watcher appears. It has `RunWithExternalLoop` for a program that already has its own loop. It keeps its state in a global variable and writes errors through the standard `log` | source code of v1.12.2 from proxy.golang.org, 2026-10-06 |
+| `fyne.io/systray` has no radio items, neither in v1.12.2 nor on `master` (`528cad2`): on Linux it sends only the dbusmenu `toggle-type` `checkmark`, although the spec also has `radio`. There is no issue or PR for it, in either `fyne-io/systray` or `getlantern/systray` | source code and `gh search`, 2026-10-06 |
+| `fyne-io/systray` is a GitHub fork of `getlantern/systray`: 186 commits ahead, 17 behind. Those 17 are from 2021–2023, mostly GTK and libayatana-appindicator, which fyne removed on purpose, plus two Windows fixes for submenus. `getlantern/systray` last changed on 2024-07-03, `fyne-io/systray` in 2026-08 | GitHub compare API, 2026-10-06 |
 
 ## 3. Tray
 
-### 3.1 Proces
+### 3.1 Process
 
-Odlučeno 2026-10-06: tray radi u istom procesu kao `gpwebcam run`. Tako nema drugog servisa ni komunikacije između procesa, a meni direktno menja stanje sesije. D-Bus treba samo session bus, a ne ekran, pa radi i iz user servisa.
+Decided 2026-10-06: the tray runs in the same process as `gpwebcam run`. That way there is no second service and no communication between processes, and the menu changes the session state directly. D-Bus needs only the session bus, not a display, so it also works from a user service.
 
-Alternativa je poseban proces `gpwebcam tray` sa sopstvenim user servisom, koji servisu šalje komande preko Unix socket-a. Prednosti su da pad tray-a ne ruši webcam i da glavni servis ostaje bez spoljnih zavisnosti. Mane su dva servisa koja korisnik uključuje i protokol između njih.
+The alternative is a separate process `gpwebcam tray` with its own user service, which sends commands to the service over a Unix socket. The advantages are that a tray crash does not bring down the webcam, and that the main service stays free of external dependencies. The disadvantages are two services that the user has to enable, and a protocol between them.
 
-### 3.2 Biblioteka
+### 3.2 Library
 
-Odlučeno 2026-10-06 (Darko): `fyne.io/systray`.
+Decided 2026-10-06 (Darko): `fyne.io/systray`.
 
-Dopunjeno 2026-10-06 (Darko): gpwebcam koristi fork [darkodemic/systray](https://github.com/darkodemic/systray) preko `replace` u `go.mod`. Razvoj biblioteke se nastavlja u forku; izmene korisne i drugima idu i kao PR u `fyne-io/systray`. Razlog je pun nadzor nad bibliotekom, pa radio stavke (§9) ne čekaju upstream izdanje.
+Amended 2026-10-06 (Darko): gpwebcam uses the fork [darkodemic/systray](https://github.com/darkodemic/systray) through `replace` in `go.mod`. Development of the library continues in the fork; changes that are useful to others also go as a PR to `fyne-io/systray`. The reason is full control over the library, so radio items (§9) do not wait for an upstream release.
 
-- Grana u forku nosi ime po izmeni, ne po gpwebcam-u (Darko, 2026-10-06): radio stavke su na `radio-menu-items`, a sledeće izmene na granama kao `feat/<izmena>`.
-- `master` forka je naša linija (Darko, 2026-10-06): izmene se spajaju u njega, a `replace` pokazuje na commit sa njega. Grana za PR u `fyne-io/systray` pravi se od njihovog `master`-a, da ne nosi naše ostale izmene. `radio-menu-items` je fast-forward-ovana u `master` forka (`9c45f67`). U lokalnom klonu `~/Projects/systray` je `origin` fork, a `upstream` `fyne-io/systray`.
-- `replace` umesto preimenovanja modula u `github.com/darkodemic/systray`: importi ostaju `fyne.io/systray`, a povratak na upstream je brisanje jednog reda.
-- Posledice: `go install …@latest` ne radi kad `go.mod` ima `replace` (README ga ne nudi); Debian arhiva (`packaging-and-release.md` §4, korak 4) ne prihvata zavisnost iz forka, pa pre ITP-a treba ili upstream izdanje ili preimenovan modul sa tagovima; Dependabot za `fyne.io/systray` samo javlja upstream izdanja, a fork se ažurira ručno.
+- A branch in the fork is named after the change, not after gpwebcam (Darko, 2026-10-06): radio items are on `radio-menu-items`, and the next changes go on branches like `feat/<change>`.
+- The fork's `master` is our line (Darko, 2026-10-06): changes are merged into it, and `replace` points to a commit from it. A branch for a PR to `fyne-io/systray` is created from their `master`, so that it does not carry our other changes. `radio-menu-items` was fast-forwarded into the fork's `master` (`9c45f67`). In the local clone `~/Projects/systray`, `origin` is the fork and `upstream` is `fyne-io/systray`.
+- `replace` instead of renaming the module to `github.com/darkodemic/systray`: imports stay `fyne.io/systray`, and going back to upstream means deleting one line.
+- Consequences: `go install …@latest` does not work when `go.mod` has a `replace` (the README does not offer it); the Debian archive (`packaging-and-release.md` §4, step 4) does not accept a dependency from a fork, so before the ITP we need either an upstream release or a renamed module with tags; Dependabot only reports upstream releases of `fyne.io/systray`, and the fork is updated by hand.
 
-Go standardna biblioteka nema D-Bus, pa je ovo prva spoljna zavisnost (ADR 0001 kaže "standardna biblioteka prvo", ne "samo").
+The Go standard library has no D-Bus, so this is the first external dependency (ADR 0001 says "standard library first", not "only").
 
-| Opcija | Za | Protiv |
+| Option | For | Against |
 |---|---|---|
-| `fyne.io/systray` | gotov StatusNotifierItem i dbusmenu; na Linuxu bez GTK-a i cgo-a, pa binarni fajl ostaje statički; sam se ponovo registruje (§2) | dve zavisnosti (`systray`, `godbus`); globalno stanje i standardni `log` umesto `slog`-a |
-| sopstveni StatusNotifierItem i dbusmenu na `godbus/dbus/v5` | jedna zavisnost; pun nadzor nad ponovnom registracijom i ikonicama | nekoliko stotina linija koda i testova više |
-| sopstveni minimalni D-Bus klijent | nula zavisnosti | previše posla za ovu korist |
+| `fyne.io/systray` | ready-made StatusNotifierItem and dbusmenu; on Linux without GTK and cgo, so the binary stays static; registers again by itself (§2) | two dependencies (`systray`, `godbus`); global state and the standard `log` instead of `slog` |
+| our own StatusNotifierItem and dbusmenu on `godbus/dbus/v5` | one dependency; full control over re-registration and icons | several hundred more lines of code and tests |
+| our own minimal D-Bus client | zero dependencies | too much work for this benefit |
 
-### 3.3 Meni
+### 3.3 Menu
 
-Samo meni, bez prozora: prozor traži GUI biblioteku, a to je mnogo veća zavisnost od D-Bus-a.
+Only a menu, no window: a window needs a GUI library, and that is a much larger dependency than D-Bus.
 
-- stanje, neaktivna stavka: na primer "HERO13 Black · 1080p · linear · stream radi"
-- Snimaj / Zaustavi snimanje, sa trajanjem dok snima
-- Otvori folder sa snimcima (`xdg-open`)
-- Vidno polje: wide, narrow, superview, linear (radio)
-- Rezolucija: 1080p, 720p (radio)
-- Hardversko dekodiranje (čekboks)
-- Notifikacije (čekboks)
-- Sakrij ikonicu
+- state, a disabled item: for example "HERO13 Black · 1080p · linear · stream running"
+- Record / Stop recording, with the duration while recording
+- Open recordings folder (`xdg-open`)
+- Field of view: wide, narrow, superview, linear (radio)
+- Resolution: 1080p, 720p (radio)
+- Hardware decoding (checkbox)
+- Notifications (checkbox)
+- Hide icon
 
-Ikonica pokazuje stanje. Po Darkovoj želji od 2026-10-06 (`camera-on-demand.md` §4): bela dok video teče, narandžasta kad ima problem, izbledela bela inače; dok snima, dobija crvenu tačku.
+The icon shows the state. As Darko asked on 2026-10-06 (`camera-on-demand.md` §4): white while video flows, orange when there is a problem, faded white otherwise; while recording, it gets a red dot.
 
-### 3.4 Gašenje ikonice
+### 3.4 Turning the icon off
 
-- `-tray=false` u unit-u (`systemctl --user edit gpwebcam.service`) gasi tray.
-- "Sakrij ikonicu" u meniju upiše to u podešavanja (§4). Ikonica se vraća kroz podešavanja ili flag, i README to opisuje.
-- Kad tray host ne postoji (GNOME bez ekstenzije, prijava preko SSH-a), servis radi kao do sada, bez greške.
+- `-tray=false` in the unit (`systemctl --user edit gpwebcam.service`) turns the tray off.
+- "Hide icon" in the menu writes this to the settings (§4). The icon comes back through the settings or the flag, and the README describes this.
+- When there is no tray host (GNOME without the extension, login over SSH), the service runs as before, without an error.
 
-### 3.5 Tray host koji dolazi kasnije
+### 3.5 A tray host that comes later
 
-Pri prijavi servis može da krene pre Quickshell-a ili panela, a panel može i da se restartuje. Ikonica zato prati kad se `org.kde.StatusNotifierWatcher` pojavi na bus-u i tada se ponovo registruje. `fyne.io/systray` to radi sam (§2); sopstvena implementacija bi morala isto.
+At login the service can start before Quickshell or the panel, and the panel can also restart. So the icon watches for `org.kde.StatusNotifierWatcher` to appear on the bus and then registers again. `fyne.io/systray` does this by itself (§2); our own implementation would have to do the same.
 
-## 4. Podešavanja
+## 4. Settings
 
-- Izbori iz menija čuvaju se u `~/.config/gpwebcam/` (`$XDG_CONFIG_HOME`). Format je još otvoren; JSON iz standardne biblioteke je najjednostavniji.
-- Flag u unit-u ima prednost nad fajlom. Ta stavka je tada zaključana u meniju, uz napomenu da je zadata u servisu.
-- Vidno polje se menja uživo: sesija pošalje stop pa START sa novim FOV-om. Kamera se vraća za oko 4 s, a za to vreme se vidi zamenska slika. Aplikacija koja koristi kameru ne primeti ništa osim prekida slike.
-- Rezolucija se ne menja uživo. Format uređaja aplikacija preuzme kad otvori kameru, pa bi promena usred rada prekinula sliku u Zoom-u. Nova rezolucija važi pri sledećem pokretanju servisa ili kad uređaj ne koristi nijedna aplikacija. Kako se pouzdano zna da ga niko ne koristi, treba istražiti; dotle važi posle restarta servisa, uz poruku u meniju.
+- Choices from the menu are saved in `~/.config/gpwebcam/` (`$XDG_CONFIG_HOME`). The format is still open; JSON from the standard library is the simplest.
+- A flag in the unit takes precedence over the file. That item is then locked in the menu, with a note that it is set in the service.
+- The field of view changes live: the session sends stop, then START with the new FOV. The camera comes back in about 4 s, and during that time the placeholder is shown. An application that uses the camera notices nothing except the break in the picture.
+- The resolution does not change live. An application takes the device format when it opens the camera, so a change mid-use would break the picture in Zoom. The new resolution applies at the next start of the service, or when no application uses the device. How to know reliably that nobody uses it needs research; until then it applies after a service restart, with a message in the menu.
 
-## 5. Snimanje
+## 5. Recording
 
-### 5.1 Prijem streama
+### 5.1 Receiving the stream
 
-Kamera šalje stream na jedan UDP port, pa snimanje mora da koristi isti prijem kao webcam.
+The camera sends the stream to one UDP port, so recording has to use the same receiver as the webcam.
 
-| Opcija | Za | Protiv |
+| Option | For | Against |
 |---|---|---|
-| A: ffmpeg se restartuje sa drugim izlazom (kopija u fajl) | mala izmena | webcam slika nestaje 1 do 2 s pri svakom pokretanju i zaustavljanju snimanja |
-| B: `gpwebcam` sam prima UDP i šalje pakete ffmpeg-u za webcam i, dok snima, snimaču | snimanje bez prekida slike; watchdog za pakete iz `first-slice-gw-start.md` §8 dobija se usput | menja put koji je podešen na 0.18 s kašnjenja; mora ponovo da se izmeri |
+| A: ffmpeg restarts with another output (a copy to a file) | small change | the webcam picture disappears for 1 to 2 s at every start and stop of recording |
+| B: `gpwebcam` itself receives UDP and sends the packets to ffmpeg for the webcam and, while recording, to the recorder | recording without a break in the picture; the packet watchdog from `first-slice-gw-start.md` §8 comes along for free | changes the path that was tuned to 0.18 s of latency; has to be measured again |
 
-Odlučeno: B, urađeno 2026-10-06 (presek 2, §9). Pravilo da se sluša samo na IP adresi hosta na GoPro interfejsu ostaje (`net.ListenUDP` na toj adresi), a datagrami se primaju još samo sa adrese kamere.
+Decided: B, done 2026-10-06 (slice 2, §9). The rule to listen only on the host's IP address on the GoPro interface stays (`net.ListenUDP` on that address), and datagrams are now also accepted only from the camera's address.
 
 ```mermaid
 flowchart LR
-    cam["GoPro"] -->|"MPEG-TS preko UDP-a"| recv["gpwebcam prijem<br/>IP hosta, port 8554"]
-    recv -->|"stdin"| dec["ffmpeg dekodiranje"]
+    cam["GoPro"] -->|"MPEG-TS over UDP"| recv["gpwebcam receiver<br/>host IP, port 8554"]
+    recv -->|"stdin"| dec["ffmpeg decoding"]
     dec --> dev["/dev/video42"]
-    recv -->|"samo dok snima"| rec["ffmpeg -c copy"]
-    rec --> file["snimak .mkv"]
-    recv --> wd["watchdog za pakete"]
+    recv -->|"only while recording"| rec["ffmpeg -c copy"]
+    rec --> file[".mkv recording"]
+    recv --> wd["packet watchdog"]
 ```
 
-### 5.2 Fajl
+### 5.2 File
 
-- `-map 0:v:0 -c copy`: samo video, bez ponovnog kodiranja; procesor skoro ne radi.
-- Matroska (`.mkv`), jer ostaje čitljiva i kad snimanje prekine izvučen kabl (predajna beleška §10.2).
-- Folder: odlučeno 2026-10-07 (Darko), uvek `~/Videos/gpwebcam`, jer unit dozvoljava pisanje samo u `~/Videos` (§6). Drugi folder: flag `-record-dir` uz drop-in sa `ReadWritePaths`. Prvobitni predlog sa `$XDG_VIDEOS_DIR` je odbačen: na Darkovoj mašini XDG folder za video nije podešen, a lokalizovan folder bi unit ionako morao posebno da dozvoli. Ime fajla po vremenu početka, na primer `GoPro-2026-10-06-135012.mkv`; isto vreme dobija `-2`, `-3`.
-- Oko 6 Mb/s, oko 2.7 GB na sat. Bez zvuka.
-- Izvlačenje kabla ili zaustavljanje servisa završava snimak, i fajl ostaje ispravan. Kad se kamera vrati, snimanje se ne nastavlja samo; korisnik ga ponovo pokreće.
+- `-map 0:v:0 -c copy`: video only, without re-encoding; the CPU is almost idle.
+- Matroska (`.mkv`), because it stays readable even when an unplugged cable cuts the recording short (handover note §10.2).
+- Folder: decided 2026-10-07 (Darko), always `~/Videos/gpwebcam`, because the unit allows writing only to `~/Videos` (§6). A different folder: the `-record-dir` flag together with a drop-in that sets `ReadWritePaths`. The original proposal with `$XDG_VIDEOS_DIR` was rejected: on the test machine the XDG videos folder is not set, and a localized folder would have to be allowed separately in the unit anyway. The file name comes from the start time, for example `GoPro-2026-10-06-135012.mkv`; the same time gets `-2`, `-3`.
+- About 6 Mb/s, about 2.7 GB per hour. No audio.
+- Unplugging the cable or stopping the service ends the recording, and the file stays valid. When the camera comes back, recording does not resume by itself; the user starts it again.
 
-### 5.3 Bez tray-a
+### 5.3 Without the tray
 
-Ko nema tray, snima komandom `gpwebcam record start|stop`. Komanda razgovara sa servisom preko Unix socket-a u `$XDG_RUNTIME_DIR/gpwebcam/` (HTTP preko `net/http`, standardna biblioteka). Odlučeno 2026-10-06 (Darko): ide u 0.2.0.
+Anyone without a tray records with the command `gpwebcam record start|stop`. The command talks to the service over a Unix socket in `$XDG_RUNTIME_DIR/gpwebcam/` (HTTP through `net/http`, standard library). Decided 2026-10-06 (Darko): it goes into 0.2.0.
 
-## 6. Unit i sandbox
+## 6. Unit and sandbox
 
-- Servis treba da piše u folder sa snimcima i u `~/.config/gpwebcam/`. `ConfigurationDirectory=gpwebcam` daje pravo pisanja u `~/.config/gpwebcam` uprkos `ProtectHome=read-only` (provereno 2026-10-06, §9).
-- Za snimke, odlučeno 2026-10-07 (Darko): `ReadWritePaths=-%h/Videos`, a `ProtectHome=read-only` ostaje. "-" znači da unit ne pada kad folder ne postoji (provereno 2026-10-07 privremenim user unit-om); snimanje tada ne uspe, sa porukom. Druga opcija, postavka sa bilo kojim folderom bez `ProtectHome`, je odbačena jer bi servis i ffmpeg smeli da pišu svuda u home.
-- Kontrolni socket: `RuntimeDirectory=gpwebcam` daje `/run/user/<uid>/gpwebcam`, u koji servis sme da piše, dok je ostatak `/run/user/<uid>` pod `ProtectSystem=strict` samo za čitanje (provereno 2026-10-07).
-- Folder sa snimcima otvara fajl menadžer preko `org.freedesktop.FileManager1.ShowFolders` na session D-Bus-u. Proces pokrenut iz servisa (`xdg-open`) bi delio njegov sandbox, pa i home samo za čitanje; D-Bus aktivacija pokreće fajl menadžer van njega.
-- `RestrictAddressFamilies` već dozvoljava `AF_UNIX`, pa D-Bus i kontrolni socket rade bez izmene.
+- The service has to write to the recordings folder and to `~/.config/gpwebcam/`. `ConfigurationDirectory=gpwebcam` gives write access to `~/.config/gpwebcam` despite `ProtectHome=read-only` (verified 2026-10-06, §9).
+- For recordings, decided 2026-10-07 (Darko): `ReadWritePaths=-%h/Videos`, and `ProtectHome=read-only` stays. "-" means the unit does not fail when the folder does not exist (verified 2026-10-07 with a temporary user unit); recording then fails, with a message. The other option, a setup with any folder and without `ProtectHome`, was rejected because the service and ffmpeg would be allowed to write anywhere in the home directory.
+- Control socket: `RuntimeDirectory=gpwebcam` provides `/run/user/<uid>/gpwebcam`, which the service may write to, while the rest of `/run/user/<uid>` is read-only under `ProtectSystem=strict` (verified 2026-10-07).
+- The recordings folder is opened by the file manager through `org.freedesktop.FileManager1.ShowFolders` on the session D-Bus. A process started from the service (`xdg-open`) would share its sandbox, including the read-only home directory; D-Bus activation starts the file manager outside it.
+- `RestrictAddressFamilies` already allows `AF_UNIX`, so D-Bus and the control socket work without changes.
 
-## 7. Preseci
+## 7. Slices
 
-Redosled odlučen 2026-10-06 (Darko):
+Order decided 2026-10-06 (Darko):
 
-1. Podešavanja u fajlu i tray meni sa vidnim poljem, rezolucijom, hardverskim dekodiranjem, notifikacijama i sakrivanjem. Ne dira put streama.
-2. Sopstveni UDP prijem (§5.1, opcija B), merenje kašnjenja i watchdog za pakete.
-3. Snimanje: stavka u meniju i, po odluci, `gpwebcam record`.
+1. Settings in a file, and a tray menu with field of view, resolution, hardware decoding, notifications and hiding. Does not touch the stream path.
+2. Own UDP receiver (§5.1, option B), latency measurement and the packet watchdog.
+3. Recording: a menu item and, depending on the decision, `gpwebcam record`.
 
-Uz svaki presek: README, man stranica, `doctor` (tray host, folder za snimke) i CONTRIBUTING kad se menja raspored paketa.
+With every slice: README, man page, `doctor` (tray host, recordings folder), and CONTRIBUTING when the package layout changes.
 
 ## 8. Test plan
 
-- Tray na Quickshell-u: ikonica se pojavi; posle restarta Quickshell-a se vrati; meni menja FOV uživo, a Zoom ostaje povezan.
-- Bez tray host-a (kontejner, SSH): servis radi i ne piše greške u petlji.
-- Kašnjenje sa sopstvenim prijemom naspram 0.18 s pre izmene, ista metoda kao u `second-slice-gw-run.md` §4.
-- Snimanje: početak i kraj iz menija; izvučen kabl usred snimanja ostavlja fajl koji se pušta; snimanje ne prekida sliku u Zoom-u.
-- Paketi: unit sa novim `ReadWritePaths` na sve četiri distribucije u kontejnerima.
+- Tray on Quickshell: the icon appears; after a Quickshell restart it comes back; the menu changes the FOV live, and Zoom stays connected.
+- Without a tray host (container, SSH): the service runs and does not log errors in a loop.
+- Latency with the own receiver versus 0.18 s before the change, with the same method as in `second-slice-gw-run.md` §4.
+- Recording: start and stop from the menu; a cable pulled mid-recording leaves a file that plays; recording does not break the picture in Zoom.
+- Packages: the unit with the new `ReadWritePaths` on all four distributions in containers.
 
-## 9. Gde smo i šta sledi
+## 9. Where we are and what is next
 
-- 2026-10-06: Darkov predlog, provere iz §2 i ovaj plan. Darko prihvatio tray u istom procesu, `fyne.io/systray` i redosled preseka.
-- 2026-10-06, presek 1 napisan (testovi prolaze sa `-race`, i na Go 1.22):
-  - `internal/settings`: JSON u `~/.config/gpwebcam/settings.json` (`$CONFIGURATION_DIRECTORY`, pa `$XDG_CONFIG_HOME`); fajl može da ima samo izmenjene ključeve; nepoznat ključ ili vrednost je greška, a servis tada zadržava podrazumevane ili poslednje ispravne vrednosti.
-  - `gpwebcam config [<setting> [<value>]]`; servis proverava fajl na 2 s i primenjuje izmenu. Flag zadat na komandnoj liniji ima prednost i zaključava stavku u meniju.
-  - Izmena FOV-a ili dekodera prekida sesiju (`errReconfigured`), a petlja odmah pokreće novu. Sesija se registruje za prekid pre nego što pročita podešavanja. Rezolucija se pamti i važi posle restarta.
-  - `internal/tray`: meni iz §3.3 bez stavki za snimanje; ikonica nacrtana u kodu (64x64, siva, plava, narandžasta).
-  - `doctor`: provera fajla sa podešavanjima i tray host-a (`NameHasOwner` za `org.kde.StatusNotifierWatcher` preko `godbus`).
-  - Unit: `ConfigurationDirectory=gpwebcam`. Provereno privremenim user unit-om (`systemd-run --user`): sa njim se u `~/.config/gpwebcam` piše uprkos `ProtectHome=read-only`, bez njega "Read-only file system", a systemd postavlja `CONFIGURATION_DIRECTORY`.
-  - Privremeni demo program na Quickshell-u: ikonica se registruje i nestaje, ponovo se pokreće u istom procesu (sakrij pa `config tray on` radi bez restarta), tooltip i meni se menjaju, a klikovi poslati kroz `com.canonical.dbusmenu.Event` stižu do podešavanja.
-  - v4l2loopback 0.15.4 (`vidioc_try_fmt_vid`): dok čitač drži format, pisac pri `S_FMT` dobije stari format bez greške. Zato rezolucija uživo nije bezbedna; `OpenOutput` povratni format i ne proverava.
-  - Binarni fajl je i dalje statički, 9.2 MB umesto 7.1 MB (D-Bus i tray). Dependabot sada prati i Go module.
-- 2026-10-06: commit `dbde29f`, CI zelen. Darko instalirao snapshot paket; `gpwebcam config res 720` pa restart servisa: uređaj `YU12:1280x720@30`, ikonica registrovana kod Quickshell-a, `doctor` bez problema. Sa kamerom: prvo HTTP 500 sa error 4 (Shutter) na svaki START, jer kamera nije imala bateriju (predajna beleška §2); sa baterijom 720p, linear i VAAPI rade, video 4.5 s posle priključenja.
-- Nađeno usput, ispravke čekaju Darkovu odluku: (1) `v4l2.OpenOutput` ne proverava format koji je drajver prihvatio, pa bi start u drugoj rezoluciji dok aplikacija drži uređaj dao pokvarenu sliku; predlog je da servis nastavi u veličini koju uređaj ima, a nova rezolucija čeka sledeći restart. (2) Error 4 se prikazuje kao opšti "Camera problem"; predlog je posebna poruka na zamenskoj slici i u notifikaciji (baterija, pa gašenje kamere).
-- 2026-10-06, proba iz menija sa kamerom (720p), Darko: "sve radi". Iz loga, od klika do "video is flowing":
+- 2026-10-06: Darko's proposal, the checks in §2 and this plan. Darko accepted the tray in the same process, `fyne.io/systray` and the order of the slices.
+- 2026-10-06, slice 1 written (tests pass with `-race`, also on Go 1.22):
+  - `internal/settings`: JSON in `~/.config/gpwebcam/settings.json` (`$CONFIGURATION_DIRECTORY`, then `$XDG_CONFIG_HOME`); the file may contain only the changed keys; an unknown key or value is an error, and the service then keeps the default or the last valid values.
+  - `gpwebcam config [<setting> [<value>]]`; the service checks the file every 2 s and applies a change. A flag given on the command line takes precedence and locks the item in the menu.
+  - A change of FOV or decoder interrupts the session (`errReconfigured`), and the loop starts a new one right away. The session registers for interruption before it reads the settings. The resolution is saved and applies after a restart.
+  - `internal/tray`: the menu from §3.3 without the recording items; the icon is drawn in code (64x64, gray, blue, orange).
+  - `doctor`: a check of the settings file and of the tray host (`NameHasOwner` for `org.kde.StatusNotifierWatcher` through `godbus`).
+  - Unit: `ConfigurationDirectory=gpwebcam`. Verified with a temporary user unit (`systemd-run --user`): with it, writing to `~/.config/gpwebcam` works despite `ProtectHome=read-only`; without it, "Read-only file system"; and systemd sets `CONFIGURATION_DIRECTORY`.
+  - A temporary demo program on Quickshell: the icon registers and disappears, starts again in the same process (hide, then `config tray on` works without a restart), the tooltip and the menu change, and clicks sent through `com.canonical.dbusmenu.Event` reach the settings.
+  - v4l2loopback 0.15.4 (`vidioc_try_fmt_vid`): while a reader holds the format, a writer gets the old format on `S_FMT`, without an error. So a live resolution change is not safe; `OpenOutput` does not even check the returned format.
+  - The binary is still static, 9.2 MB instead of 7.1 MB (D-Bus and tray). Dependabot now also tracks Go modules.
+- 2026-10-06: commit `dbde29f`, CI green. Darko installed the snapshot package; `gpwebcam config res 720`, then a service restart: device `YU12:1280x720@30`, icon registered with Quickshell, `doctor` reports no problems. With the camera: at first HTTP 500 with error 4 (Shutter) on every START, because the camera had no battery (handover note §2); with the battery, 720p, linear and VAAPI work, video 4.5 s after plugging in.
+- Found along the way, fixes waiting for Darko's decision: (1) `v4l2.OpenOutput` does not check the format the driver accepted, so a start in a different resolution while an application holds the device would give a broken picture; the proposal is that the service continues in the size the device has, and the new resolution waits for the next restart. (2) Error 4 is shown as a generic "Camera problem"; the proposal is a dedicated message on the placeholder and in the notification (battery, then turning the camera off).
+- 2026-10-06, test from the menu with the camera (720p), Darko: "everything works". From the log, from the click to "video is flowing":
 
-  | Izmena | Vreme |
+  | Change | Time |
   |---|---|
   | FOV wide | 5.8 s |
-  | FOV superview | oko 20 s: START 2.3 s posle STOP-a vratio error 4; sledeći START prijavio stream bez videa, pa stop i START posle 3 s i watchdog posle 6 s; slika u trećoj sesiji |
+  | FOV superview | about 20 s: START 2.3 s after STOP returned error 4; the next START reported a stream without video, then stop and START after 3 s and the watchdog after 6 s; picture in the third session |
   | FOV narrow | 5.5 s |
   | FOV linear | 5.5 s |
   | hwdec none | 5.4 s |
   | hwdec auto | 5.7 s |
 
-  Hide icon u 21:29:58, `gpwebcam config tray on` u 21:30:05: ikonica ponovo registrovana bez restarta servisa. Pri svakom startu sa VAAPI-jem ffmpeg upiše tri linije "hardware accelerator failed to decode picture" pre prvog frejma; ima ih i u logu buildova od 2026-10-05, pa nisu nove.
-- Ideja posle superview slučaja: kad START vrati error 4, ponoviti START posle oko 1 s u istoj sesiji, umesto da se sesija završi i čeka `retryDelay`.
-- 2026-10-06: Darko odobrio ispravke (1) i (2), a ponovni START posle error 4 "ako možeš sam da ga obradiš". Urađeno (testovi prolaze sa `-race`, i na Go 1.22):
-  - `v4l2.OpenOutput` čita format koji je `S_FMT` vratio. Drugi pixel format je greška; druga veličina se prihvata. Servis tada nastavlja u toj veličini, kameru traži u rezoluciji te veličine (`camera.ResolutionFor`), upiše upozorenje u log i pošalje notifikaciju, a tray prikazuje da nova rezolucija čeka restart. Potvrđeno u v4l2loopback 0.15.4 (`vidioc_s_fmt_vid`): pisac dobija OUTPUT token i stari format, bez `EBUSY`.
-  - `camera.ErrCannotCapture` za error 4, i kad stigne kao HTTP 500 sa JSON telom (HERO13). `StartWebcam` šalje START do 3 puta, 1 s razmaka, dok kamera vraća error 4; posle toga sesija se završava, zamenska slika kaže "Camera cannot start. Is its battery in and charged?", a notifikacija predlaže proveru baterije i gašenje kamere. Da li ponovljeni START pomaže u slučaju sa baterijom, nije provereno, jer se ne može namerno izazvati; test sa lažnom kamerom pokriva oba ishoda.
-  - Test za zamensku sliku sada proverava da svaka poruka staje u sliku. Prvi pokušaj (`leftmost <= 0`) ne bi ništa uhvatio: red od 120 znakova počinje u koloni 3, jer ffmpeg odseca slova na ivici; sada se traži margina od 1/20 širine. Nova poruka počinje na 131 px od 640, "Camera not answering…" na 122.
-- 2026-10-06, ispravka (1) uživo: ffmpeg čitač (`-f v4l2 -i /dev/video42`) drži uređaj u 720p; servis zaustavljen, čitač ostaje; build iz radnog stabla sa `-res 1080` upiše "an application keeps the device at its size" (`size=1280x720 wanted=1920x1080`), uređaj ostaje `YU12:1280x720`, kamera krene u 720p i video teče za 4.2 s. Usput: ffmpeg čitač kome je pisac nestao ne reaguje na SIGTERM, tek na SIGKILL; zbog toga je kamera u probi stajala oko 2 min.
-- 2026-10-06: commit `301bf30`, CI zelen.
-- 2026-10-06: Darko pitao za restart iz menija i kameru koja radi samo kad je aplikacija traži; predlog je `camera-on-demand.md`. Ikonica promenjena: bela, narandžasta i izbledela bela umesto sive, plave i narandžaste.
-- 2026-10-06: Darko odlučio da rad na zahtev (`camera-on-demand.md`) ide pre preseka 2.
-- 2026-10-06: Darko primetio da kamera, vidno polje i rezolucija u meniju imaju čekbokse iako se bira jedna vrednost, jer biblioteka nema radio stavke (§2). Dogovoreno: dodati ih u `fyne.io/systray` i poslati PR. Urađeno u lokalnom klonu `~/Projects/systray` (od `master`-a `528cad2`), commit `9c45f67` na grani `radio-menu-items` forka `darkodemic/systray`, PR [fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135):
-  - `AddMenuItemRadio` i `AddSubMenuItemRadio`, sa istim `Check`/`Uncheck` kao čekboks; ekskluzivnost grupe drži aplikacija, kao do sada u `show`. Linux i BSD: `toggle-type` `radio`; Windows: `MFT_RADIOCHECK`; macOS bez izmene, jer tamo i izbor jedne vrednosti nosi kvačicu.
-  - Test za `toggle-type` i `toggle-state`, grupa "Size" u primeru, README. Testovi prolaze, Windows build prolazi; primer pokrenut na Quickshell-u vraća `toggle-type` `radio` kroz `GetLayout`. Windows test fajl se na upstream `master`-u ne kompajlira ni bez ove izmene (`systray_windows_test.go:47`, stara signatura).
-  - gpwebcam: tri poziva u `internal/tray/tray.go` prešla na `AddSubMenuItemRadio`.
-- 2026-10-06: Darko odlučio da gpwebcam pređe na fork (§3.2). `go.mod`: `replace fyne.io/systray => github.com/darkodemic/systray v1.12.3-0.20261006205618-9c45f672f861`, commit `9c45f67` sa grane `radio-menu-items`. Provereno bez `go.work`: `gofmt`, `go vet` i `go test -race` prolaze na Go 1.27.1 i 1.22.12; `goreleaser release --snapshot --clean` pravi svih šest paketa; binarni fajl je i dalje statički, a `go version -m` pokazuje fork.
-- 2026-10-06: rad na zahtev završen (`camera-on-demand.md`, commit-i `ee8ee18` i `99a6349`).
-- 2026-10-06, presek 2 napisan u worktree-ju `.worktrees/receive-udp`, grana `feat/receive-udp-in-gpwebcam` (testovi prolaze sa `-race`, i na pravom Go 1.22):
-  - `internal/stream/receive.go`: `net.ListenUDP` na adresi hosta, samo datagrami sa adrese kamere (ostali se broje kao tuđi); red od 2048 datagrama (oko 3.5 s) između socket-a i ffmpeg-ovog stdin-a, pa spor ffmpeg ne blokira socket, nego se višak odbacuje i broji, kao ranije `overrun_nonfatal`.
-  - ffmpeg čita `-f mpegts -i pipe:0` i više ne otvara socket. Čuvar za pakete je sada u gpwebcam-u: `ReadTimeout` od poslednjeg datagrama, a pre prvog važi `FirstFrame`.
-  - Greške: `ErrNoPackets` (nijedan datagram, verovatno firewall ili VPN) i `ErrNoVideo` sa brojem datagrama kad stižu, a ffmpeg ništa ne dekodira. Savet o firewall-u na zamenskoj slici sada ide samo uz `ErrNoPackets`. Brojači (primljeno, odbačeno, tuđe) idu u log kad nešto fali.
-  - ffmpeg koji čeka na pipe-u ne reaguje na SIGTERM; prekid sada prvo zatvori njegov stdin, pa ffmpeg izlazi odmah (test prekida: 0.3 s umesto 2.3 s, odnosno umesto `grace`).
-  - Kašnjenje, novi test `TestLatency` (`GPWEBCAM_LATENCY=1`): lokalni libx264 640x360 30 fps, broj frejma upisan u piksele, vreme slanja iz `showinfo`; 390 frejmova po merenju. Stari put (ffmpeg sluša UDP, `main` `99a6349`): medijana 134 ms softverski, 135 ms VAAPI; novi: 134 ms i 135 ms; p90 135 i 136 ms u oba. Sopstveni prijem ne dodaje kašnjenje. Stalnih oko 134 ms (4 frejma) je u putu pošiljalac i dekoder, isto za obe verzije; zato test poredi verzije, a ne meri kašnjenje kamere.
-- 2026-10-06: proba uživo: video 4.1 s posle uključivanja, bez tuđih i odbačenih datagrama, pa kamera šalje sa svoje adrese. Darko instalirao paket i probao sa Zoom-om. Commit `4f4ff85`, CI zelen.
-- 2026-10-07, presek 3 napisan u worktree-ju `.worktrees/recording`, grana `feat/recording` (testovi prolaze sa `-race`, i na pravom Go 1.22):
-  - `stream.Config.OnPacket` daje snimaču iste datagrame koje dobija dekoder, bez kopiranja; svaki datagram ima svoj slice koji niko ne menja.
-  - `internal/record`: drugi ffmpeg, `-f mpegts -i pipe:0 -map 0:v:0 -c copy -f matroska`, svoj red od 2048 datagrama (višak se odbacuje i broji), proces na zaključanoj niti zbog `Pdeathsig`. Fajl se pravi unapred sa `O_EXCL`, pa ga ffmpeg prepisuje. Potrebno je najmanje 1 GB slobodnog mesta. Test: TS sa video i audio stream-om iseče se na datagrame, a `ffprobe` potvrđuje Matroska fajl sa samo video stream-om od oko 3 s.
-  - Servis: snimanje važi dok ga korisnik ne ugasi, a fajl postoji dok traje sesija; nova sesija (promena FOV-a ili dekodera) otvara novi fajl. Snimanje drži kameru upaljenom i u režimu demand. Izvučen kabl i režim off završavaju snimanje, i ono se ne nastavlja samo. Kad ffmpeg sam stane (pun disk), snimanje se gasi uz notifikaciju.
-  - Kontrolni API: `GET /v1/status`, `POST /v1/record/start`, `POST /v1/record/stop`, socket 0600; `gpwebcam record [start|stop]` čeka do 20 s da se fajl otvori, jer kamera u režimu demand prvo mora da krene.
-  - Tray: Record, Stop recording sa vremenom (osvežava se svake sekunde), Open recordings folder; crvena tačka na ikonici dok se snima.
-  - `doctor` proverava `~/Videos` i slobodno mesto.
-- 2026-10-07, proba uživo (build iz worktree-ja, snimci u scratchpad, 720p, režim demand): `gpwebcam record start` dok kamera miruje pokrene kameru, a fajl se otvori za 2.4 s; promena FOV-a tokom snimanja sačuva prvi fajl i otvori drugi; `record stop` ispiše fajl, trajanje i veličinu. `ffprobe`: oba fajla su Matroska sa jednim H.264 1280x720 stream-om, 7.0 s i 3.5 s (ffmpeg pri kopiranju odbacuje početne frejmove do prvog ključnog). Pisanje u `~/Videos` iz sandbox-a servisa ostaje za probu sa paketom.
-- 2026-10-07, Darkova proba paketa iz radnog stabla: Record i Stop iz menija, snimanje u 1080p posle promene rezolucije i otvaranje foldera rade iz sandbox-a servisa (`~/Videos/gpwebcam`, `ReadWritePaths=-%h/Videos`). Dve ispravke:
-  - Veličina u notifikaciji: "8 MB" za fajl koji Nautilus prikazuje kao 9.2 MB. Bajtovi su bili tačni (`bytes=9165466` u logu, isto kao `ls`), ali su prikazani kao MiB (`>>20`), bez decimala. Sada `record.SizeText` računa decimalno sa jednom decimalom, kao Nautilus i Dolphin, i u notifikaciji, i u `gpwebcam record stop`, i u porukama o slobodnom mestu; prag je tačno 1 GB.
-  - Prvi snimak je pao na sesiju u kojoj je kamera prijavila stream, a stiglo je samo 49 datagrama bez ijednog frejma, pa je ostao fajl od 52 kB bez slike. Snimač sada kreće sa prvim dekodiranim frejmom, a ne na početku sesije, pa sesija bez videa ne ostavlja fajl.
-- 2026-10-07: Darko predložio "Quit gpwebcam" na dnu menija i pokretač u meniju aplikacija, da se servis vrati bez terminala; dogovoreno oboje. Quit zaustavlja servis preko systemd-a (`GetUnitByPID`, pa `Unit.Stop`), pa ga systemd ne pokreće ponovo; bez systemd-a samo uredno završi proces. Notifikacija ide sinhrono (`notify.SendNow`), pre nego što proces nestane. Pokretač: `packaging/desktop/gpwebcam.desktop` u `/usr/share/applications`, "GoPro Webcam", ikonica `camera-web` iz teme dok Darko ne napravi svoju; pokreće `gpwebcam launch`, koji pokreće servis preko `Manager.StartUnit`, čeka da bude aktivan i notifikacijom javlja ishod, jer iz menija nema terminala. `desktop-file-validate` bez primedbi; `gpwebcam launch` dok servis radi kaže "already running".
-- Sledeće: proba paketa (Quit, GoPro Webcam iz menija), commit preseka 3, pa izdanje 0.2.0.
+  Hide icon at 21:29:58, `gpwebcam config tray on` at 21:30:05: the icon registered again without a service restart. At every start with VAAPI, ffmpeg writes three lines "hardware accelerator failed to decode picture" before the first frame; they are also in the log of the builds from 2026-10-05, so they are not new.
+- Idea after the superview case: when START returns error 4, repeat START after about 1 s in the same session, instead of ending the session and waiting for `retryDelay`.
+- 2026-10-06: Darko approved fixes (1) and (2), and the repeated START after error 4 "if you can handle it on your own". Done (tests pass with `-race`, also on Go 1.22):
+  - `v4l2.OpenOutput` reads the format that `S_FMT` returned. A different pixel format is an error; a different size is accepted. The service then continues in that size, asks the camera for the resolution of that size (`camera.ResolutionFor`), writes a warning to the log and sends a notification, and the tray shows that the new resolution waits for a restart. Confirmed in v4l2loopback 0.15.4 (`vidioc_s_fmt_vid`): the writer gets the OUTPUT token and the old format, without `EBUSY`.
+  - `camera.ErrCannotCapture` for error 4, also when it arrives as HTTP 500 with a JSON body (HERO13). `StartWebcam` sends START up to 3 times, 1 s apart, while the camera returns error 4; after that the session ends, the placeholder says "Camera cannot start. Is its battery in and charged?", and the notification suggests checking the battery and turning the camera off. Whether the repeated START helps in the battery case is not verified, because that case cannot be caused on purpose; a test with a fake camera covers both outcomes.
+  - The placeholder test now checks that every message fits in the picture. The first attempt (`leftmost <= 0`) would not catch anything: a line of 120 characters starts at column 3, because ffmpeg cuts off letters at the edge; now a margin of 1/20 of the width is required. The new message starts at 131 px of 640, "Camera not answering…" at 122.
+- 2026-10-06, fix (1) live: an ffmpeg reader (`-f v4l2 -i /dev/video42`) holds the device at 720p; the service is stopped, the reader stays; a build from the working tree with `-res 1080` writes "an application keeps the device at its size" (`size=1280x720 wanted=1920x1080`), the device stays `YU12:1280x720`, the camera starts in 720p and video flows within 4.2 s. Along the way: an ffmpeg reader whose writer has gone does not react to SIGTERM, only to SIGKILL; because of that the webcam was down for about 2 min during the test.
+- 2026-10-06: commit `301bf30`, CI green.
+- 2026-10-06: Darko asked about a restart from the menu and a camera that runs only when an application asks for it; the proposal is `camera-on-demand.md`. The icon changed: white, orange and faded white instead of gray, blue and orange.
+- 2026-10-06: Darko decided that camera on demand (`camera-on-demand.md`) goes before slice 2.
+- 2026-10-06: Darko noticed that camera, field of view and resolution in the menu have checkboxes although a single value is chosen, because the library has no radio items (§2). Agreed: add them to `fyne.io/systray` and send a PR. Done in the local clone `~/Projects/systray` (from `master` `528cad2`), commit `9c45f67` on the branch `radio-menu-items` of the fork `darkodemic/systray`, PR [fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135):
+  - `AddMenuItemRadio` and `AddSubMenuItemRadio`, with the same `Check`/`Uncheck` as a checkbox; the application keeps the group exclusive, as it already did in `show`. Linux and BSD: `toggle-type` `radio`; Windows: `MFT_RADIOCHECK`; macOS unchanged, because there a single-value choice also carries a check mark.
+  - A test for `toggle-type` and `toggle-state`, a "Size" group in the example, README. Tests pass, the Windows build passes; the example run on Quickshell returns `toggle-type` `radio` through `GetLayout`. The Windows test file does not compile on upstream `master` even without this change (`systray_windows_test.go:47`, old signature).
+  - gpwebcam: three calls in `internal/tray/tray.go` switched to `AddSubMenuItemRadio`.
+- 2026-10-06: Darko decided that gpwebcam moves to the fork (§3.2). `go.mod`: `replace fyne.io/systray => github.com/darkodemic/systray v1.12.3-0.20261006205618-9c45f672f861`, commit `9c45f67` from the branch `radio-menu-items`. Verified without `go.work`: `gofmt`, `go vet` and `go test -race` pass on Go 1.27.1 and 1.22.12; `goreleaser release --snapshot --clean` builds all six packages; the binary is still static, and `go version -m` shows the fork.
+- 2026-10-06: camera on demand finished (`camera-on-demand.md`, commits `ee8ee18` and `99a6349`).
+- 2026-10-06, slice 2 written in the worktree `.worktrees/receive-udp`, branch `feat/receive-udp-in-gpwebcam` (tests pass with `-race`, also on a real Go 1.22):
+  - `internal/stream/receive.go`: `net.ListenUDP` on the host's address, only datagrams from the camera's address (others are counted as foreign); a queue of 2048 datagrams (about 3.5 s) between the socket and ffmpeg's stdin, so a slow ffmpeg does not block the socket; instead the excess is dropped and counted, like `overrun_nonfatal` before.
+  - ffmpeg reads `-f mpegts -i pipe:0` and no longer opens a socket. The packet watchdog is now in gpwebcam: `ReadTimeout` from the last datagram, and before the first one `FirstFrame` applies.
+  - Errors: `ErrNoPackets` (no datagram at all, probably a firewall or VPN) and `ErrNoVideo` with the datagram count when datagrams arrive but ffmpeg decodes nothing. The firewall hint on the placeholder now comes only with `ErrNoPackets`. The counters (received, dropped, foreign) go to the log when something is missing.
+  - An ffmpeg that waits on the pipe does not react to SIGTERM; cancellation now first closes its stdin, so ffmpeg exits right away (cancellation test: 0.3 s instead of 2.3 s, that is, instead of `grace`).
+  - Latency, new test `TestLatency` (`GPWEBCAM_LATENCY=1`): local libx264 640x360 30 fps, the frame number written into the pixels, the send time from `showinfo`; 390 frames per measurement. Old path (ffmpeg listens on UDP, `main` `99a6349`): median 134 ms in software, 135 ms with VAAPI; new: 134 ms and 135 ms; p90 135 and 136 ms in both. The own receiver adds no latency. The constant of about 134 ms (4 frames) is in the sender and decoder path, the same for both versions; so the test compares the versions and does not measure the camera's latency.
+- 2026-10-06: live test: video 4.1 s after switching on, no foreign and no dropped datagrams, so the camera sends from its own address. Darko installed the package and tried it with Zoom. Commit `4f4ff85`, CI green.
+- 2026-10-07, slice 3 written in the worktree `.worktrees/recording`, branch `feat/recording` (tests pass with `-race`, also on a real Go 1.22):
+  - `stream.Config.OnPacket` gives the recorder the same datagrams the decoder gets, without copying; each datagram has its own slice that nobody modifies.
+  - `internal/record`: a second ffmpeg, `-f mpegts -i pipe:0 -map 0:v:0 -c copy -f matroska`, its own queue of 2048 datagrams (the excess is dropped and counted), the process on a locked thread because of `Pdeathsig`. The file is created in advance with `O_EXCL`, and ffmpeg then overwrites it. At least 1 GB of free space is required. Test: a TS with a video and an audio stream is cut into datagrams, and `ffprobe` confirms a Matroska file with only a video stream of about 3 s.
+  - Service: recording stays on until the user turns it off, and a file lasts as long as the session; a new session (a change of FOV or decoder) opens a new file. Recording keeps the camera on, also in demand mode. An unplugged cable and off mode end the recording, and it does not resume by itself. When ffmpeg stops on its own (full disk), recording is turned off with a notification.
+  - Control API: `GET /v1/status`, `POST /v1/record/start`, `POST /v1/record/stop`, socket 0600; `gpwebcam record [start|stop]` waits up to 20 s for the file to open, because in demand mode the camera first has to start.
+  - Tray: Record, Stop recording with the time (refreshed every second), Open recordings folder; a red dot on the icon while recording.
+  - `doctor` checks `~/Videos` and the free space.
+- 2026-10-07, live test (build from the worktree, recordings into the scratchpad, 720p, demand mode): `gpwebcam record start` while the camera is idle starts the camera, and the file opens within 2.4 s; a FOV change during recording keeps the first file and opens a second one; `record stop` prints the file, the duration and the size. `ffprobe`: both files are Matroska with one H.264 1280x720 stream, 7.0 s and 3.5 s (when copying, ffmpeg drops the initial frames up to the first keyframe). Writing to `~/Videos` from the service sandbox is left for the test with the package.
+- 2026-10-07, Darko's test of a package from the working tree: Record and Stop from the menu, recording in 1080p after a resolution change, and opening the folder work from the service sandbox (`~/Videos/gpwebcam`, `ReadWritePaths=-%h/Videos`). Two fixes:
+  - The size in the notification: "8 MB" for a file that Nautilus shows as 9.2 MB. The bytes were correct (`bytes=9165466` in the log, the same as `ls`), but they were shown as MiB (`>>20`), without decimals. Now `record.SizeText` computes in decimal units with one decimal place, like Nautilus and Dolphin, in the notification, in `gpwebcam record stop` and in the free-space messages; the threshold is exactly 1 GB.
+  - The first recording fell on a session in which the camera reported a stream, but only 49 datagrams arrived, without a single frame, so a 52 kB file without a picture was left behind. The recorder now starts with the first decoded frame, not at the start of the session, so a session without video leaves no file.
+- 2026-10-07: Darko proposed "Quit gpwebcam" at the bottom of the menu and a launcher in the applications menu, so the service can be brought back without a terminal; both were agreed. Quit stops the service through systemd (`GetUnitByPID`, then `Unit.Stop`), so systemd does not start it again; without systemd it just ends the process cleanly. The notification is sent synchronously (`notify.SendNow`), before the process goes away. Launcher: `packaging/desktop/gpwebcam.desktop` in `/usr/share/applications`, "GoPro Webcam", the icon `camera-web` from the theme until Darko makes his own; it runs `gpwebcam launch`, which starts the service through `Manager.StartUnit`, waits for it to become active and reports the outcome with a notification, because there is no terminal when started from the menu. `desktop-file-validate` reports nothing; `gpwebcam launch` while the service runs says "already running".
+- Next: test the package (Quit, GoPro Webcam from the menu), commit slice 3, then release 0.2.0.

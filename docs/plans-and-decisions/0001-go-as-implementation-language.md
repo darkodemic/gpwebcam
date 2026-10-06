@@ -1,57 +1,57 @@
-# 0001 — Go kao jezik implementacije
+# 0001 — Go as the implementation language
 
-- **Status:** Accepted 2026-09-29. `gw` se piše u Go-u.
+- **Status:** Accepted 2026-09-29. `gw` is written in Go.
 - **Date:** 2026-09-29
 - **Supersedes:** — / **Superseded by:** —
 - **Owner:** Darko
-- **Related:** `gopro-fork-review-and-handover.md` §3 (nalazi iz review-a), §4 (principi), §6 (otvorene odluke)
+- **Related:** `gopro-fork-review-and-handover.md` §3 (review findings), §4 (principles), §6 (open decisions)
 
 ## Context
 
-`gw` radi mali broj stvari, ali svaku treba uraditi pažljivo:
+`gw` does a small number of things, but each one has to be done carefully:
 
-- pronađe GoPro mrežni interfejs po USB vendor ID-u ili ga dobije od udev-a;
-- sačeka IPv4 adresu na tom interfejsu;
-- pošalje nekoliko HTTP poziva kameri, svaki sa timeout-om;
-- pokrene ffmpeg, nadgleda ga i ugasi;
-- na SIGTERM pošalje STOP kameri;
-- proveri sve ulaze.
+- finds the GoPro network interface by USB vendor ID, or gets it from udev;
+- waits for an IPv4 address on that interface;
+- sends a few HTTP calls to the camera, each with a timeout;
+- starts ffmpeg, supervises it and stops it;
+- sends STOP to the camera on SIGTERM;
+- validates all inputs.
 
-Radi kao systemd servis bez root-a.
+It runs as a systemd service without root.
 
-Stari bash skript iz forka imao je baš one greške koje bash olakšava: aritmetičku evaluaciju argumenta u `[[ -ne ]]`, deljenje reči u `modprobe` komandi i neprovereni tekst u ffmpeg filtergraph-u (§3.1 beleške).
+The old bash script from the fork had exactly the bugs that bash makes easy: arithmetic evaluation of an argument in `[[ -ne ]]`, word splitting in the `modprobe` command, and unvalidated text in the ffmpeg filtergraph (handover note §3.1).
 
 ## Decision
 
-1. `gw` je jedan Go binarni fajl, bez runtime zavisnosti osim ffmpeg-a.
-2. ffmpeg se pokreće kroz `os/exec` sa listom argumenata, nikad kroz shell.
-3. Prednost ima standardna biblioteka: `net/http` sa timeout-ima, `os/signal`, `context`. Spoljna zavisnost ulazi samo kad štedi pravi posao.
+1. `gw` is a single Go binary, with no runtime dependencies except ffmpeg.
+2. ffmpeg is started through `os/exec` with an argument list, never through a shell.
+3. The standard library comes first: `net/http` with timeouts, `os/signal`, `context`. An external dependency comes in only when it saves real work.
 
 ## Consequences
 
 **Positive**
 
-- Cela klasa shell injekcija nestaje, jer nema shell-a.
-- Ulazi su tipovi (enum za rezoluciju i FOV, brojevi u opsegu), pa neispravna vrednost ne stigne do ffmpeg-a ni do kamere.
-- Pakovanje je jednostavno: jedan fajl, lako za PKGBUILD.
+- The whole class of shell injections goes away, because there is no shell.
+- Inputs are types (enums for resolution and FOV, range-checked numbers), so an invalid value does not reach ffmpeg or the camera.
+- Packaging is simple: one file, easy for a PKGBUILD.
 
 **Negative**
 
-- Za build treba Go toolchain, a skript se mogao pokrenuti odmah.
-- Binarni fajl ima nekoliko MB umesto nekoliko KB.
+- The build needs a Go toolchain, while the script could be run right away.
+- The binary is a few MB instead of a few KB.
 
 **Risks**
 
-- ffmpeg i dalje parsira mrežni ulaz. Ublaženo time što radi bez root-a i sluša samo na GoPro interfejsu (§4 beleške).
+- ffmpeg still parses network input. Mitigated by running without root and listening only on the GoPro interface (handover note §4).
 
 ## Alternatives considered
 
-- **Bash:** najbrži početak, ali iste vrste grešaka kao u forku.
-- **Python:** dobar, ali traži interpreter i pakovanje zavisnosti na ciljnoj mašini.
-- **Rust:** bezbedan, ali previše ceremonije za ovako mali alat.
-- **Go bez ffmpeg-a** (sopstveni MPEG-TS demux i H.264 dekodiranje): mnogo posla bez koristi za korisnika.
+- **Bash:** the fastest start, but the same kinds of bugs as in the fork.
+- **Python:** good, but needs an interpreter and packaging of dependencies on the target machine.
+- **Rust:** safe, but too much ceremony for such a small tool.
+- **Go without ffmpeg** (own MPEG-TS demux and H.264 decoding): a lot of work with no benefit to the user.
 
 ## Out of scope
 
-- GUI i tray ikonica.
-- GStreamer kao zamena za ffmpeg.
+- GUI and tray icon.
+- GStreamer as a replacement for ffmpeg.

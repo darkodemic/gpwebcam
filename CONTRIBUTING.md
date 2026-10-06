@@ -27,7 +27,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format, finds it by label, and follows v4l2loopback's client usage event, which says whether an application streams from the device. |
 | `packaging/` | Files the packages install: systemd user unit, module configuration, man page, Debian copyright, post-install message. |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
-| `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results, written in Serbian. |
+| `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results. |
 
 ## Build and test
 

@@ -1,84 +1,84 @@
-# Upstream issue-i i PR-ovi: šta znače za gw
+# Upstream issues and PRs: what they mean for gw
 
-- **Status:** Završeno 2026-09-29. Pročitani svi issue-i i otvoreni PR-ovi; zaključci su uneti u `first-slice-gw-start.md` i u §2 beleške `gopro-fork-review-and-handover.md`.
+- **Status:** Done 2026-09-29. Read all issues and open PRs; the conclusions went into `first-slice-gw-start.md` and into §2 of the handover note `gopro-fork-review-and-handover.md`.
 - **Date:** 2026-09-29
 - **Owner:** Darko
-- **Related:** `gopro-fork-review-and-handover.md` §7 (upstream kao baza znanja); `first-slice-gw-start.md`; `open-gopro-webcam-api.md`
+- **Related:** `gopro-fork-review-and-handover.md` §7 (upstream as a knowledge base); `first-slice-gw-start.md`; `open-gopro-webcam-api.md`
 
-Izvor je `jschmid1/gopro_as_webcam_on_linux`, pročitano kroz `gh` 2026-09-29: 61 issue (36 otvorenih), 7 otvorenih PR-ova i spojeni PR-ovi sa činjenicama (#77, #68, #24, #15, #10, #60, #26). Kod se ne prenosi; ovde je samo ponašanje kamere i okruženja. Brojevi su issue-i i PR-ovi u upstream repou. Oznaka **[spec]** znači da činjenica dolazi iz Open GoPro specifikacije, a **[zaključak]** da je to izvod, ne prijava korisnika.
+The source is `jschmid1/gopro_as_webcam_on_linux`, read through `gh` on 2026-09-29: 61 issues (36 open), 7 open PRs, and the merged PRs that hold facts (#77, #68, #24, #15, #10, #60, #26). No code is carried over; this covers only the behavior of the camera and the environment. Numbers are issues and PRs in the upstream repo. The marker **[spec]** means the fact comes from the Open GoPro specification, and **[inference]** means it is a deduction, not a user report.
 
-## 1. Ponašanje kamere
+## 1. Camera behavior
 
-### 1.1 Endpoint-i i odgovori
+### 1.1 Endpoints and responses
 
-- Stari endpoint-i su na HTTP portu 80 na adresi `.51`: `/gp/gpWebcam/START?res=1080|720|480[&port=N]`, `/gp/gpWebcam/SETTINGS?fov=<id>`, `/gp/gpWebcam/STOP`, `/gp/gpWebcam/EXIT` (#24, #30, #41, #59, #68, #77, PR #80).
-- FOV id-evi: wide 0, narrow 2, superview 3, linear 4. Id 6 za narrow je bio pogrešan (#63, ispravljeno u #77).
-- Na HERO13 Black stari endpoint-i rade: START bez `fov`, pa `SETTINGS?fov=` (komentar u #77, mart 2026, firmver nije naveden). Rade i na HERO12 Black (#63, #85).
-- START bez parametara radi (PR #80). Nepoznata putanja vraća HTTP 404 sa telom `{}` (#77).
-- Odgovor je JSON `{"status":N,"error":N}`. Stari skript svako neprazno telo tumači kao uspeh, pa je `{"status":1,"error":1}` prijavljen kao uspeh, a slike nije bilo (#28).
-- [spec] status: 0 Off, 1 Idle, 2 High Power Preview, 3 Low Power Preview. error: 0 None, 1 Set Preset, 2 Set Window Size, 3 Exec Stream, 4 Shutter, 5 Com timeout, 6 Invalid param, 7 Unavailable, 8 Exit. Znači #28 je "idle, preset nije uspeo", a `status 2` posle START-a znači da stream ide.
-- Stariji firmveri nemaju webcam: HERO8 fw 2.0 nema `gpWebcam`, 2.5 ima (#59); HERO8 fw 01.60 nema meni za USB režim (#9).
+- The old endpoints are on HTTP port 80 at the `.51` address: `/gp/gpWebcam/START?res=1080|720|480[&port=N]`, `/gp/gpWebcam/SETTINGS?fov=<id>`, `/gp/gpWebcam/STOP`, `/gp/gpWebcam/EXIT` (#24, #30, #41, #59, #68, #77, PR #80).
+- FOV ids: wide 0, narrow 2, superview 3, linear 4. Id 6 for narrow was wrong (#63, fixed in #77).
+- On HERO13 Black the old endpoints work: START without `fov`, then `SETTINGS?fov=` (comment in #77, March 2026, firmware not given). They also work on HERO12 Black (#63, #85).
+- START without parameters works (PR #80). An unknown path returns HTTP 404 with the body `{}` (#77).
+- The response is JSON `{"status":N,"error":N}`. The old script reads any non-empty body as success, so `{"status":1,"error":1}` was reported as success, but there was no picture (#28).
+- [spec] status: 0 Off, 1 Idle, 2 High Power Preview, 3 Low Power Preview. error: 0 None, 1 Set Preset, 2 Set Window Size, 3 Exec Stream, 4 Shutter, 5 Com timeout, 6 Invalid param, 7 Unavailable, 8 Exit. So #28 is "idle, preset failed", and `status 2` after START means the stream is running.
+- Older firmware has no webcam: HERO8 fw 2.0 has no `gpWebcam`, 2.5 has it (#59); HERO8 fw 01.60 has no menu for USB mode (#9).
 
-### 1.2 Mreža
+### 1.2 Network
 
-- Kamera je DHCP server na `.51` i hostu daje `.52` do `.54` u /24 mreži; zakup oko 4.8 dana (#30).
-- Viđene mreže: 172.21.112, 172.26.167, 172.27.199, 172.23.118, 172.21.155, 172.22.149, 172.22.133, 172.29.174, 172.20.161, 172.28.103. Sve odgovaraju [spec] šemi `172.2X.1YZ.51`, gde je XYZ poslednje tri cifre serijskog broja.
-- Svaka prijava "pogrešna IP adresa" je u stvari pogrešan interfejs (#9, #30, #40, #47, #52, #65, #70) ili NetworkManager u režimu `ipv4.method=shared`, gde host dobije `10.42.0.1` (PR #71).
-- Interfejs bez IPv4 adrese: neupravljan ili nepodešen interfejs (#14, #27, #54, PR #79). HERO10 sa fw 01.62 ne dobije adresu ni ručno (#54, nerešeno).
-- Firewall odbacuje dolazni UDP, a kamera je u webcam režimu i START vraća `status 2`: #2, #7, #42, #55, PR #26, PR #60. VPN kvari izbor interfejsa ili start (#41, #70).
+- The camera is a DHCP server on `.51` and gives the host `.52` to `.54` in a /24 network; lease about 4.8 days (#30).
+- Networks seen: 172.21.112, 172.26.167, 172.27.199, 172.23.118, 172.21.155, 172.22.149, 172.22.133, 172.29.174, 172.20.161, 172.28.103. All match the [spec] scheme `172.2X.1YZ.51`, where XYZ are the last three digits of the serial number.
+- Every "wrong IP address" report is in fact the wrong interface (#9, #30, #40, #47, #52, #65, #70) or NetworkManager in `ipv4.method=shared` mode, where the host gets `10.42.0.1` (PR #71).
+- Interface without an IPv4 address: an unmanaged or unconfigured interface (#14, #27, #54, PR #79). HERO10 with fw 01.62 does not get an address even manually (#54, unresolved).
+- The firewall drops incoming UDP, while the camera is in webcam mode and START returns `status 2`: #2, #7, #42, #55, PR #26, PR #60. A VPN breaks the interface choice or the start (#41, #70).
 
-### 1.3 USB i interfejs
+### 1.3 USB and interface
 
-- Imena interfejsa su raznolika: `enx<mac>`, `enp0s20f0u1`, `enp57s0u1u2`, `usb0` (#7, #17, #27, #30, #54, PR #71). Product string takođe: "HERO8 BLACK", "GoPro HERO9", "HERO10 Black" (#15, #17, #24, #36). Vendor ID `2672` je uvek isti; HERO12 Black ima product ID `0059` (PR #72).
-- Interfejs postoji samo u USB režimu GoPro Connect, ne MTP (#9, #52, #65). Sa Media Mod-om interfejs se ne pojavi (#47).
-- USB mrežni drajver se ne pominje nigde. [spec] Open GoPro preko USB-a traži NCM, pa je verovatno `cdc_ncm`. Treba proveriti na kameri.
-- Posle gašenja i paljenja kamere sa uključenim kablom kamera ne prikazuje ni USB ni webcam, i START ne uspeva dok se kabl ne izvuče i vrati (#74, nerešeno).
+- Interface names vary: `enx<mac>`, `enp0s20f0u1`, `enp57s0u1u2`, `usb0` (#7, #17, #27, #30, #54, PR #71). So does the product string: "HERO8 BLACK", "GoPro HERO9", "HERO10 Black" (#15, #17, #24, #36). Vendor ID `2672` is always the same; HERO12 Black has product ID `0059` (PR #72).
+- The interface exists only in the GoPro Connect USB mode, not MTP (#9, #52, #65). With the Media Mod the interface does not show up (#47).
+- The USB network driver is not mentioned anywhere. [spec] Open GoPro over USB requires NCM, so it is probably `cdc_ncm`. To be checked on the camera.
+- After the camera is turned off and on with the cable plugged in, the camera shows neither USB nor webcam, and START fails until the cable is unplugged and plugged back in (#74, unresolved).
 
-### 1.4 Vreme
+### 1.4 Timing
 
-- U trenutku udev `add` događaja interfejs još nema IPv4; restart servisa 15 s kasnije uspe (#17, PR #15).
-- PR-ovi čekaju adresu do 15 s (PR #76) ili 10 s DHCP plus 10 s (PR #79). PR #80 čeka 3 s posle START-a. PR #76 ponavlja START posle 3 s, pa na svakih 5 s, dok širina slike na `/dev/video42` ne pređe 640; kamera "ponekad ne krene posle prvog START-a".
-- Tačno merenje od priključenja do HTTP odgovora ne postoji.
+- At the moment of the udev `add` event the interface has no IPv4 yet; a service restart 15 s later succeeds (#17, PR #15).
+- PRs wait for the address up to 15 s (PR #76) or 10 s DHCP plus 10 s (PR #79). PR #80 waits 3 s after START. PR #76 repeats START after 3 s, then every 5 s, until the picture width on `/dev/video42` exceeds 640; the camera "sometimes does not start after the first START".
+- There is no exact measurement from plugging in to the HTTP response.
 
 ### 1.5 Stream
 
-- Kamera šalje MPEG-TS preko UDP-a na host:8554, na kameri ništa ne sluša (#59).
-- Sadržaj TS-a (#56): H.264 High 1920x1080 `yuvj420p` 29.97 fps, AAC 48 kHz stereo, privatni stream `0x80` i AC3 sa 0 kanala. Ulazak usred GOP-a daje "non-existing PPS 0" dok ne stigne prvi IDR.
-- Najviše 1080p30, bez zvuka u webcam režimu (#36, #44, #84). `-r 720` na HERO8 nije imao efekat (#32).
-- Kašnjenje: oko 500 do 700 ms na x86, od toga ~700 ms za HERO13 na i9-12900K; nekoliko sekundi na Jetson-u (#46).
-- Zaustavljanje servisa ostavlja kameru u webcam režimu; HERO8 posle toga ne može ponovo da se poveže do gašenja kamere (#33, #43).
+- The camera sends MPEG-TS over UDP to host:8554; nothing listens on the camera (#59).
+- Content of the TS (#56): H.264 High 1920x1080 `yuvj420p` 29.97 fps, AAC 48 kHz stereo, private stream `0x80` and AC3 with 0 channels. Joining in the middle of a GOP gives "non-existing PPS 0" until the first IDR arrives.
+- At most 1080p30, no audio in webcam mode (#36, #44, #84). `-r 720` on HERO8 had no effect (#32).
+- Latency: about 500 to 700 ms on x86, including ~700 ms for HERO13 on an i9-12900K; several seconds on a Jetson (#46).
+- Stopping the service leaves the camera in webcam mode; after that, HERO8 cannot connect again until the camera is turned off (#33, #43).
 
 ### 1.6 v4l2loopback
 
-- Modul dele OBS Virtual Camera i droidcam, pa izbacivanje ne uspeva ili ih kvari (#12, #48, #53, PR #81).
-- Sa `exclusive_caps=1` aplikacije vide uređaj samo dok neko piše u njega (#13, #42). Desktop Skype i Teams ga zato ne vide (#31).
-- `Operation not permitted` pri otvaranju `/dev/video42` (#56).
+- OBS Virtual Camera and droidcam share the module, so unloading it fails or breaks them (#12, #48, #53, PR #81).
+- With `exclusive_caps=1` applications see the device only while something writes to it (#13, #42). That is why desktop Skype and Teams do not see it (#31).
+- `Operation not permitted` when opening `/dev/video42` (#56).
 
-## 2. Zahtevi za gw
+## 2. Requirements for gw
 
-| # | Zahtev | Izvor | Gde |
+| # | Requirement | Source | Where |
 |---|---|---|---|
-| 1 | Interfejs po vendor ID-u `2672` u sysfs-u, nikad po imenu, "poslednjem" ili "bilo kojoj 172.x" adresi | §1.3; PR #10, PR #82 | prvi presek |
-| 2 | Čekati IPv4 bar 20 do 30 s, ne pasti odmah | #17, PR #76, PR #79 | prvi presek |
-| 3 | Adresa kamere je host /24 + `.51`, uz proveru šeme `172.2X.1YZ.0/24`; inače jasna poruka (NetworkManager shared, statička adresa) | §1.2; PR #71 | prvi presek |
-| 4 | Parsirati `status` i `error`; posle START-a očekivati `status 2`, `error 0` | #28 | prvi presek |
-| 5 | Pre START-a pročitati status; ako je kamera ostala u webcam režimu, prvo STOP | #33, #43 | prvi presek |
-| 6 | STOP na SIGTERM i SIGINT, pa ugasiti ffmpeg | #33, #43, PR #80 | prvi presek |
-| 7 | ffmpeg: `-map 0:v:0`, opcije za nisku latenciju pre `-i` | #56, PR #80 | prvi presek |
-| 8 | Watchdog: ako posle START-a nema paketa za 3 do 5 s, ponoviti START nekoliko puta, pa prijaviti "kamera šalje, paketi ne stižu: firewall ili VPN" | PR #76; §1.2 | sledeći presek |
-| 9 | Ruta ka kameri mora ići preko GoPro interfejsa (VPN) | #41, #70 | sledeći presek |
-| 10 | Prepoznati "interfejs postoji, HTTP ne odgovara" i reći korisniku da izvuče i vrati kabl | #74 | sledeći presek |
-| 11 | Instalacija: NetworkManager keyfile ili systemd-networkd `.network` za GoPro interfejse (ipv4 auto, never-default, bez DNS-a); rezervni v4l2loopback uređaj za OBS | PR #71, PR #79, #48, #53, #64 | instalacija |
-| 12 | Firewall: bez root-a ga ne možemo popraviti; otkriti firewalld, ufw i nft i ispisati tačno pravilo za 8554/udp na GoPro interfejsu | §1.2 | kasnije |
-| 13 | Poruke o grešci koje razlikuju: nema uređaja `2672` (MTP, Media Mod, stari firmver), nema IP-a, pogrešna mreža, HTTP ne odgovara, START odbijen sa dekodiranim kodom, nema paketa, v4l2 ne može da se otvori | #9, #30, #40, #47, #52, #65, #70, #74 | prvi presek za ono što već radi |
-| 14 | Jedna instanca po interfejsu; više kamera traži svoj `port` i svoj uređaj | #67, PR #68, #85 | kasnije |
+| 1 | Interface by vendor ID `2672` in sysfs, never by name, the "last" one or "any 172.x" address | §1.3; PR #10, PR #82 | first slice |
+| 2 | Wait for IPv4 for at least 20 to 30 s, do not fail at once | #17, PR #76, PR #79 | first slice |
+| 3 | The camera address is the host /24 + `.51`, with a check of the `172.2X.1YZ.0/24` scheme; otherwise a clear message (NetworkManager shared, static address) | §1.2; PR #71 | first slice |
+| 4 | Parse `status` and `error`; after START expect `status 2`, `error 0` | #28 | first slice |
+| 5 | Before START read the status; if the camera stayed in webcam mode, STOP first | #33, #43 | first slice |
+| 6 | STOP on SIGTERM and SIGINT, then stop ffmpeg | #33, #43, PR #80 | first slice |
+| 7 | ffmpeg: `-map 0:v:0`, low-latency options before `-i` | #56, PR #80 | first slice |
+| 8 | Watchdog: if no packets arrive for 3 to 5 s after START, repeat START a few times, then report "the camera sends, packets do not arrive: firewall or VPN" | PR #76; §1.2 | next slice |
+| 9 | The route to the camera must go through the GoPro interface (VPN) | #41, #70 | next slice |
+| 10 | Recognize "the interface exists, HTTP does not answer" and tell the user to unplug and replug the cable | #74 | next slice |
+| 11 | Installation: a NetworkManager keyfile or a systemd-networkd `.network` for GoPro interfaces (ipv4 auto, never-default, no DNS); a spare v4l2loopback device for OBS | PR #71, PR #79, #48, #53, #64 | installation |
+| 12 | Firewall: without root we cannot fix it; detect firewalld, ufw and nft and print the exact rule for 8554/udp on the GoPro interface | §1.2 | later |
+| 13 | Error messages that tell apart: no `2672` device (MTP, Media Mod, old firmware), no IP, wrong network, HTTP does not answer, START rejected with a decoded code, no packets, v4l2 cannot be opened | #9, #30, #40, #47, #52, #65, #70, #74 | first slice for what already works |
+| 14 | One instance per interface; multiple cameras need their own `port` and their own device | #67, PR #68, #85 | later |
 
-## 3. Za proveru na HERO13 sa firmverom 02.10
+## 3. To check on HERO13 with firmware 02.10
 
-- USB drajver (`cdc_ncm`?) i product ID.
-- HTTP na :80, :8080 ili oba; odgovori `/gopro/webcam/*` i `/gp/gpWebcam/*`.
-- Vreme od priključenja do DHCP adrese i do prvog HTTP odgovora.
-- Da li je UDP izvorni port kamere stalan.
-- Da li RTSP (`protocol=RTSP`) radi i kakvo mu je kašnjenje.
-- Da li kamera zaspi bez keep-alive poziva.
-- Ponašanje iz #74 (gašenje kamere sa uključenim kablom).
+- USB driver (`cdc_ncm`?) and product ID.
+- HTTP on :80, :8080 or both; the responses of `/gopro/webcam/*` and `/gp/gpWebcam/*`.
+- Time from plugging in to the DHCP address and to the first HTTP response.
+- Whether the camera's UDP source port is fixed.
+- Whether RTSP (`protocol=RTSP`) works and what its latency is.
+- Whether the camera goes to sleep without keep-alive calls.
+- The behavior from #74 (turning the camera off with the cable plugged in).

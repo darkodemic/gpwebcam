@@ -1,103 +1,103 @@
-# Kamera na zahtev i restart iz menija
+# Camera on demand and restart from the menu
 
-- **Status:** Prihvaćen 2026-10-06: podrazumevano `demand`, zadrška 15 s, radi se pre preseka 2 iz `tray-and-recording.md` (§5).
+- **Status:** Accepted 2026-10-06: `demand` by default, grace period 15 s, done before slice 2 of `tray-and-recording.md` (§5).
 - **Date:** 2026-10-06
 - **Owner:** Darko
-- **Related:** `tray-and-recording.md` (tray, podešavanja, snimanje); ADR 0003 (gpwebcam drži uređaj kao user servis); predajna beleška §2 (kamera, baterija)
+- **Related:** `tray-and-recording.md` (tray, settings, recording); ADR 0003 (gpwebcam owns the device as a user service); handover note §2 (camera, battery)
 
 ## 1. Problem
 
-Darko, 2026-10-06: čim se kamera priključi, servis je prebacuje u webcam režim i ona strimuje sve dok je servis upaljen, pa se greje bez potrebe. Želi da kamera radi samo kad treba, ručno ili, još bolje, kad je neka aplikacija (Zoom) zatraži, kao obična web kamera. Uz to pita da li u meniju treba stavka za restart servisa.
+Darko, 2026-10-06: as soon as the camera is plugged in, the service switches it to webcam mode and it streams for as long as the service is running, so it heats up for no reason. He wants the camera to run only when needed, manually or, better still, when an application (Zoom) asks for it, like a regular webcam. He also asks whether the menu needs an item to restart the service.
 
-## 2. Provereno
+## 2. Verified
 
-| Činjenica | Izvor |
+| Fact | Source |
 |---|---|
-| v4l2loopback ima događaj `V4L2_EVENT_PRI_CLIENT_USAGE` (`V4L2_EVENT_PRIVATE_START + 0x08E00000 + 1`) sa telom `{ __u32 count }`: 1 dok neki čitač ima pokrenut video, 0 kad nijedan nema | `v4l2loopback.c` 0.15.4, linije 815-824 i 2147-2160, 2026-10-06 |
-| Događaj stiže na `STREAMON` i `STREAMOFF` čitača i na zatvaranje uređaja, jer `close` radi `REQBUFS(0)`, a on `STREAMOFF`; to važi i kad je čitač ubijen sa `kill -9`. Odmah pri pretplati stiže trenutno stanje | isto, linije 2065-2130, 1703-1712, 2163-2170 |
-| Samo otvaranje uređaja, na primer kad aplikacija nabraja kamere, ne šalje događaj | isto: događaj se šalje samo iz `streamon` i `streamoff` |
-| Od koje verzije v4l2loopback ima ovaj događaj i koju verziju imaju Debian 13 i Ubuntu 24.04, nije provereno | treba proveriti |
-| User systemd na session bus-u nudi `org.freedesktop.systemd1.Manager.RestartUnit` i `StopUnit`; servis ima `INVOCATION_ID`, pa zna da radi pod systemd-om | `busctl --user`, 2026-10-06 |
-| Od klika do slike kamera se pokreće za 5.4 do 5.8 s, a jednom je trebalo oko 20 s | `tray-and-recording.md` §9 |
+| v4l2loopback has the event `V4L2_EVENT_PRI_CLIENT_USAGE` (`V4L2_EVENT_PRIVATE_START + 0x08E00000 + 1`) with the body `{ __u32 count }`: 1 while some reader has video running, 0 when none has | `v4l2loopback.c` 0.15.4, lines 815-824 and 2147-2160, 2026-10-06 |
+| The event arrives on a reader's `STREAMON` and `STREAMOFF` and when the device is closed, because `close` does `REQBUFS(0)`, and that does `STREAMOFF`; this also holds when the reader is killed with `kill -9`. The current state arrives right at subscription | same, lines 2065-2130, 1703-1712, 2163-2170 |
+| Merely opening the device, for example when an application lists cameras, sends no event | same: the event is sent only from `streamon` and `streamoff` |
+| Since which version v4l2loopback has this event, and which version Debian 13 and Ubuntu 24.04 have, is not verified | to be verified |
+| User systemd on the session bus offers `org.freedesktop.systemd1.Manager.RestartUnit` and `StopUnit`; the service has `INVOCATION_ID`, so it knows it runs under systemd | `busctl --user`, 2026-10-06 |
+| From click to picture the camera starts in 5.4 to 5.8 s, and once it took about 20 s | `tray-and-recording.md` §9 |
 
-## 3. Predlog
+## 3. Proposal
 
-### 3.1 Režimi
+### 3.1 Modes
 
-Nova postavka `camera`, u meniju i u `gpwebcam config`:
+A new setting `camera`, in the menu and in `gpwebcam config`:
 
-| Režim | Ponašanje |
+| Mode | Behavior |
 |---|---|
-| `demand` (na zahtev) | kamera kreće kad neka aplikacija pokrene video, a staje kad je nijedna ne koristi duže od zadrške (§3.2) |
-| `always` (uvek) | kao sada: kamera kreće čim se priključi |
-| `off` (pauza) | kamera se ne pokreće; zamenska slika kaže da je pauzirana, ikonica je izbledela |
+| `demand` (on demand) | the camera starts when an application starts video, and stops when no application has used it for longer than the grace period (§3.2) |
+| `always` (always on) | as now: the camera starts as soon as it is plugged in |
+| `off` (pause) | the camera does not start; the placeholder says it is paused, the icon is faded |
 
-Odlučeno 2026-10-06 (Darko): podrazumevano `demand`. Ako drajver nema događaj (pretplata vrati `EINVAL`), servis radi kao `always`, upiše to u log, a `doctor` upozori.
+Decided 2026-10-06 (Darko): `demand` by default. If the driver does not have the event (the subscription returns `EINVAL`), the service works as `always`, writes that to the log, and `doctor` warns.
 
-Dok kamera ne radi, zamenska slika i dalje ide u uređaj, pa aplikacije vide kameru. Kad aplikacija pokrene video, prvih oko 5 s vidi "Starting GoPro HERO13 Black…", a zatim sliku kamere.
+While the camera is not running, the placeholder still goes to the device, so applications see the camera. When an application starts video, for about the first 5 s it sees "Starting GoPro HERO13 Black…", and then the camera's picture.
 
-### 3.2 Zadrška pre gašenja
+### 3.2 Grace period before turning off
 
-Kamera ne staje odmah kad poslednja aplikacija zaustavi video, nego posle zadrške. Predlog je bio 30 s; Darko je 2026-10-06 izabrao 15 s. Aplikacije ponekad zaustave pa odmah ponovo pokrenu video, na primer pri prelazu iz pregleda u sastanak (nije provereno za Zoom). Bez zadrške bi svaki takav prelaz koštao 5 s crne slike.
+The camera does not stop right away when the last application stops video, but after a grace period. The proposal was 30 s; Darko chose 15 s on 2026-10-06. Applications sometimes stop video and then start it again right away, for example when moving from the preview into the meeting (not verified for Zoom). Without a grace period, every such switch would cost 5 s of black picture.
 
-### 3.3 Kamera između korišćenja
+### 3.3 The camera between uses
 
-Servis pošalje STOP i EXIT, a USB mreža ostaje. Treba izmeriti da li se HERO13 sam gasi kad nema `keep_alive`-a. Ako se gasi, servis ga ne može probuditi preko USB-a, pa tada `keep_alive` mora da ide i između korišćenja: kamera je upaljena, ali senzor i enkoder ne rade.
+The service sends STOP and EXIT, and the USB network stays up. It needs to be measured whether the HERO13 turns itself off when there is no `keep_alive`. If it does, the service cannot wake it over USB, so `keep_alive` must then be sent between uses too: the camera is on, but the sensor and the encoder are not running.
 
-### 3.4 Rezolucija bez restarta
+### 3.4 Resolution without a restart
 
-Kad nijedna aplikacija nema pokrenut video, servis može ponovo da otvori uređaj u novoj veličini. Tada napomena "Applies when gpwebcam restarts" uglavnom nestaje. Izuzetak je aplikacija koja je postavila format, a video nije pokrenula: ona i dalje drži format, pa važi ispravka iz `301bf30` i ostaje stara veličina.
+When no application has video running, the service can reopen the device at the new size. The note "Applies when gpwebcam restarts" then mostly goes away. The exception is an application that has set the format but has not started video: it still holds the format, so the fix from `301bf30` applies and the old size stays.
 
-### 3.5 Restart iz menija
+### 3.5 Restart from the menu
 
-Stavka "Restart gpwebcam" poziva `RestartUnit("gpwebcam.service", "replace")` preko `godbus`-a, koji je već zavisnost. Prikazuje se samo kad servis radi pod systemd-om. Sa §3.4 služi uglavnom za oporavak, kad nešto zaglavi.
+The item "Restart gpwebcam" calls `RestartUnit("gpwebcam.service", "replace")` through `godbus`, which is already a dependency. It is shown only when the service runs under systemd. With §3.4 it serves mostly for recovery, when something gets stuck.
 
-### 3.6 Meni
+### 3.6 Menu
 
 - Camera: On demand, Always on, Off
 - Restart gpwebcam
 
-Snimanje (`tray-and-recording.md` §5) pali kameru bez obzira na režim, dok traje.
+Recording (`tray-and-recording.md` §5) turns the camera on regardless of the mode, for as long as it lasts.
 
-## 4. Ikonica
+## 4. Icon
 
-Darko, 2026-10-06: bela dok sve radi, narandžasta kad ima grešku, izbledela bela kad kamera ne radi. Urađeno: bela dok video teče; narandžasta za probleme; bela na 45 % za sva ostala stanja (nema kamere, pokreće se, a sa ovim predlogom i pauza i čekanje na aplikaciju). Tanka tamna ivica drži belu ikonicu vidljivom na svetlom panelu.
+Darko, 2026-10-06: white while everything works, orange when there is an error, faded white when the camera is not running. Done: white while video flows; orange for problems; white at 45 % for all other states (no camera, starting, and with this proposal also pause and waiting for an application). A thin dark outline keeps the white icon visible on a light panel.
 
-## 5. Odluke
+## 5. Decisions
 
 Darko, 2026-10-06:
 
-1. Podrazumevani režim je `demand`.
-2. Zadrška pre gašenja je 15 s.
-3. Rad na zahtev ide pre preseka 2 iz `tray-and-recording.md` (sopstveni UDP prijem): ne zavisi od njega, a rešava zagrevanje.
+1. The default mode is `demand`.
+2. The grace period before turning off is 15 s.
+3. Camera on demand comes before slice 2 of `tray-and-recording.md` (gpwebcam receives the UDP stream itself): it does not depend on it, and it solves the heating.
 
-## 6. Gde smo i šta sledi
+## 6. Where we are and what is next
 
-- 2026-10-06: Darkovo pitanje, provere iz §2 i ovaj predlog. Ikonica promenjena (§4). Darkove odluke iz §5.
-- 2026-10-06, kamera na Darkovoj mašini: setting 59 (auto power down) = 4, što je po Open GoPro specifikaciji 5 minuta. Zato servis i između korišćenja šalje `keep_alive` (§3.3); da li bi se kamera bez njega zaista ugasila na USB-u, nije mereno.
-- 2026-10-06, napisano (testovi prolaze sa `-race`, i na Go 1.22), bez §3.4:
-  - `v4l2.WatchUsage`: drugi deskriptor uređaja samo za događaje, pretplata sa `V4L2_EVENT_SUB_FL_SEND_INITIAL` (bez te zastavice početno stanje ne stiže), `select` na izuzetnom uslovu i `VIDIOC_DQEVENT`. Veličine struktura i brojevi ioctl-ova provereni C programom protiv `linux/videodev2.h` (136 i 32 bajta, `0x80885659`, `0x4020565a`). Uživo na `/dev/video42`: početno "ne koristi" odmah, "koristi" 1.05 s posle pokretanja ffmpeg čitača, "ne koristi" kad je završio posle 2 s.
-  - Postavka i flag `camera` (`demand`, `always`, `off`); meni Camera i "Restart gpwebcam" (`GetUnitByPID` pa `Unit.Restart` preko `godbus`-a, samo uz `INVOCATION_ID`).
-  - Servis: dok kamera ne treba da radi, zamenska slika "<model> ready" ili "Camera off…", uz `keep_alive`; sesija se završava 15 s posle poslednje aplikacije (`errIdle`), a promena režima odmah. Notifikacija "connected" sada stiže pri priključenju, sa rečenicom o tome šta sledi, umesto pri svakom početku videa.
-  - `doctor` proverava da li modul javlja upotrebu.
-- 2026-10-06, proba uživo (build iz radnog stabla umesto servisa, ffmpeg čitač umesto Zoom-a, 720p):
+- 2026-10-06: Darko's question, the checks in §2 and this proposal. Icon changed (§4). Darko's decisions in §5.
+- 2026-10-06, test camera: setting 59 (auto power down) = 4, which per the Open GoPro specification is 5 minutes. So the service sends `keep_alive` between uses too (§3.3); whether the camera would really turn off on USB without it was not measured.
+- 2026-10-06, written (tests pass with `-race`, and on Go 1.22), without §3.4:
+  - `v4l2.WatchUsage`: a second file descriptor for the device, only for events, a subscription with `V4L2_EVENT_SUB_FL_SEND_INITIAL` (without that flag the initial state does not arrive), `select` on the exceptional condition, and `VIDIOC_DQEVENT`. Struct sizes and ioctl numbers verified with a C program against `linux/videodev2.h` (136 and 32 bytes, `0x80885659`, `0x4020565a`). Live on `/dev/video42`: the initial "not in use" right away, "in use" 1.05 s after an ffmpeg reader started, "not in use" when it finished after 2 s.
+  - The setting and flag `camera` (`demand`, `always`, `off`); the Camera menu and "Restart gpwebcam" (`GetUnitByPID` then `Unit.Restart` through `godbus`, only with `INVOCATION_ID`).
+  - Service: while the camera does not need to run, the placeholder "<model> ready" or "Camera off…", with `keep_alive`; the session ends 15 s after the last application (`errIdle`), and on a mode change right away. The "connected" notification now arrives on plug-in, with a sentence about what comes next, instead of at every start of video.
+  - `doctor` checks whether the module reports usage.
+- 2026-10-06, live test (a build from the working tree instead of the service, an ffmpeg reader instead of Zoom, 720p):
 
-  | Korak | Rezultat |
+  | Step | Result |
   |---|---|
-  | servis krene, niko ne koristi uređaj | kamera ostaje u statusu 0 (off) |
-  | čitač pokrene video | webcam start posle 2.4 s, video posle 4.0 s; čitač prve 4 s dobija zamensku sliku (YAVG oko 45), zatim frejmove kamere (YAVG 8 do 10) |
-  | čitač završi | kamera stane posle 16.3 s (zadrška 15 s plus provera na 0.5 s) |
-  | `camera always` | video posle 3.5 s |
-  | `camera off` | kamera stane odmah |
-  | `camera demand` | kamera ostaje off |
+  | the service starts, nobody uses the device | the camera stays in status 0 (off) |
+  | the reader starts video | webcam start after 2.4 s, video after 4.0 s; for the first 4 s the reader gets the placeholder (YAVG about 45), then the camera's frames (YAVG 8 to 10) |
+  | the reader finishes | the camera stops after 16.3 s (15 s grace period plus a check every 0.5 s) |
+  | `camera always` | video after 3.5 s |
+  | `camera off` | the camera stops right away |
+  | `camera demand` | the camera stays off |
 
-- Ispravke posle probe: nepoznat ključ u `settings.json` više ne obara ceo fajl, nego se prijavi kao upozorenje (`UnknownKeysError`), a `Save` ga zadrži; inače bi stariji build fajl sa ključem `camera` odbacio i vratio podrazumevane vrednosti (tako bi se ponašao build `dbde29f` instaliran 2026-10-06). Režim off ima svoj razlog prekida (`errOff`) i poruku u logu; "found camera" se upisuje samo pri priključenju i preimenovanju interfejsa.
-- Usput 2026-10-06: lokalne provere "na Go 1.22" kroz `mise exec go@1.22` u ovoj sesiji nisu bile na 1.22, jer je shell izvozio `GOROOT` za 1.27.1, pa je Go prešao na 1.27.1. Prava provera: `mise exec go@1.22 -- env -u GOROOT -u GOBIN GOTOOLCHAIN=local GOWORK=off go test ./...`. CI koristi pravi Go 1.22 i bio je zelen.
-- 2026-10-06: commit `ee8ee18`, CI zelen. Darko instalirao paket napravljen iz `ee8ee18` (worktree bez `go.work`, sa čekboksovima) i probao sa Zoom-om, meni Camera i restart iz menija: "sve lepo radi".
-- 2026-10-06, §3.4 napisano (testovi prolaze sa `-race`, i na pravom Go 1.22, protiv `tray.go` i `go.mod` iz commit-a):
-  - `feed.Swap` menja uređaj pod lock-om feed-a, pa se između zatvaranja starog i otvaranja novog ne piše nijedan frejm. Stari izlaz mora prvi da se zatvori, jer v4l2loopback ima jedan izlazni format token.
-  - `maybeResize` radi samo između sesija: u čekanju na kameru, u čekanju na aplikaciju i pre nove sesije. Uslov je da se podešena rezolucija razlikuje od one u upotrebi, da modul javlja upotrebu i da nijedna aplikacija nema pokrenut video. Ako uređaj zadrži staru veličinu (aplikacija postavila format bez videa), ta rezolucija se ne pokušava ponovo dok se upotreba ne promeni ili dok se rezolucija ne izabere iznova. Ako se uređaj ne otvori ni u jednoj veličini, upis u zatvoren izlaz pada i servis izlazi, pa ga systemd pokreće ponovo.
-  - U režimu always sesija se sama ne završava, pa je `watchDemand` prekida kad promena čeka, a aplikacija nema.
-  - Napomena u meniju i tekstovi u README-u, man stranici i `gpwebcam config -h`: nova rezolucija važi čim nijedna aplikacija ne koristi kameru.
-- 2026-10-06, proba §3.4 uživo (build sa čekboksovima, bez fork-a; ffmpeg čitač umesto aplikacije): `res 1080` dok niko ne koristi uređaj, pa uređaj pređe na 1920x1080 za 0.1 s; čitač uključi video, kamera krene u 1080p, video posle 4.2 s; `res 720` dok čitač radi ne menja uređaj; čitač završi, kamera stane posle 17 s (zadrška), a uređaj odmah pređe na 1280x720.
-- Sledeće: commit, pa presek 2 iz `tray-and-recording.md`.
+- Fixes after the test: an unknown key in `settings.json` no longer fails the whole file, but is reported as a warning (`UnknownKeysError`), and `Save` keeps it; otherwise an older build would discard a file with the key `camera` and go back to the defaults (that is how build `dbde29f`, installed 2026-10-06, would behave). Mode off has its own stop reason (`errOff`) and log message; "found camera" is written only on plug-in and on an interface rename.
+- Along the way, 2026-10-06: the local checks "on Go 1.22" through `mise exec go@1.22` in this session were not on 1.22, because the shell exported `GOROOT` for 1.27.1, so Go switched to 1.27.1. The real check: `mise exec go@1.22 -- env -u GOROOT -u GOBIN GOTOOLCHAIN=local GOWORK=off go test ./...`. CI uses real Go 1.22 and was green.
+- 2026-10-06: commit `ee8ee18`, CI green. Darko installed the package built from `ee8ee18` (worktree without `go.work`, with checkboxes) and tried it with Zoom, the Camera menu and the restart from the menu: "everything works nicely".
+- 2026-10-06, §3.4 written (tests pass with `-race`, and on real Go 1.22, against `tray.go` and `go.mod` from the commit):
+  - `feed.Swap` replaces the device under the feed's lock, so no frame is written between closing the old one and opening the new one. The old output must be closed first, because v4l2loopback has one output format token.
+  - `maybeResize` runs only between sessions: while waiting for the camera, while waiting for an application, and before a new session. The conditions are that the configured resolution differs from the one in use, that the module reports usage, and that no application has video running. If the device keeps the old size (an application set the format without video), that resolution is not tried again until the usage changes or until the resolution is chosen again. If the device does not open at any size, the write to the closed output fails and the service exits, so systemd starts it again.
+  - In mode always the session does not end on its own, so `watchDemand` ends it when a change is pending and there is no application.
+  - The note in the menu and the texts in the README, the man page and `gpwebcam config -h`: the new resolution applies as soon as no application uses the camera.
+- 2026-10-06, live test of §3.4 (a build with checkboxes, without the fork; an ffmpeg reader instead of an application): `res 1080` while nobody uses the device, and the device switches to 1920x1080 in 0.1 s; the reader turns video on, the camera starts in 1080p, video after 4.2 s; `res 720` while the reader runs does not change the device; the reader finishes, the camera stops after 17 s (grace period), and the device switches to 1280x720 right away.
+- Next: commit, then slice 2 of `tray-and-recording.md`.
