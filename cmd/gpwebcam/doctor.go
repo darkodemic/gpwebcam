@@ -302,16 +302,25 @@ func checkService(r *report) {
 		r.warn("systemctl not found; start gpwebcam run yourself")
 		return
 	}
+	unreachable := func() {
+		r.warn("cannot reach this user's systemd",
+			"Run gpwebcam doctor as yourself in your desktop session, not with sudo or in a container.")
+	}
 	// is-system-running prints a state even when the manager is degraded;
 	// nothing at all means this process cannot reach the user's systemd.
 	if state, _ := output("systemctl", "--user", "is-system-running"); strings.TrimSpace(state) == "" {
-		r.warn("cannot reach this user's systemd",
-			"Run gpwebcam doctor as yourself in your desktop session, not with sudo or in a container.")
+		unreachable()
 		return
 	}
 	enabled, _ := output("systemctl", "--user", "is-enabled", "gpwebcam.service")
 	active, _ := output("systemctl", "--user", "is-active", "gpwebcam.service")
 	enabled, active = strings.TrimSpace(enabled), strings.TrimSpace(active)
+	if active == "" {
+		// is-enabled reads unit files without the manager; is-active
+		// needs it. In a container is-system-running says "offline".
+		unreachable()
+		return
+	}
 	switch {
 	case enabled == "" || enabled == "not-found":
 		r.warn("gpwebcam.service is not installed for systemd",

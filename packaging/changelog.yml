@@ -1,6 +1,22 @@
 # Package changelog in chglog format; nFPM turns it into the Debian
 # changelog and the RPM %changelog. Add an entry for every release, with
-# semver set to the version and package release (version-1).
+# semver set to the version and package release (version-1), newest first.
+- semver: 0.2.0-1
+  date: 2026-10-07T00:00:00Z
+  packager: Darko Demić <mail@darkodemic.com>
+  deb:
+    urgency: medium
+    distributions: [unstable]
+  changes:
+    # Debian changelog lines stay within 80 characters (lintian).
+    - note: Tray icon with a menu for the camera, recording, restart and quit.
+    - note: Camera on demand by default; it streams while an app uses it.
+    - note: Recording to Matroska files in ~/Videos/gpwebcam.
+    - note: Settings apply while it runs, the resolution too (gpwebcam config).
+    - note: GoPro Webcam in the application menu starts the service.
+    - note: gpwebcam receives the stream itself, only from the camera.
+    - note: Clearer messages when the camera cannot start; more doctor checks.
+    - note: After the upgrade, run systemctl --user daemon-reload.
 - semver: 0.1.0-1
   date: 2026-10-05T00:00:00Z
   packager: Darko Demić <mail@darkodemic.com>

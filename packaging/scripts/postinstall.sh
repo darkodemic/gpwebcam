@@ -13,5 +13,7 @@ gpwebcam: to use a GoPro as a webcam:
   3. On the camera, set Preferences > Connections > USB Connection to
      GoPro Connect, then plug it in.
   4. Check the setup: gpwebcam doctor
+After an upgrade, as your user: systemctl --user daemon-reload
+and then: systemctl --user restart gpwebcam
 MSG
 exit 0

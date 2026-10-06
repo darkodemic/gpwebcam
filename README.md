@@ -4,7 +4,7 @@
 
 It runs as a systemd user service without root. The service waits for the camera, starts its webcam mode when you plug it in, and shows a "Camera not connected" picture while it is unplugged, so applications keep listing the camera. In our measurements the delay from scene to the Zoom preview is about 0.2 seconds.
 
-**Status:** early, no release yet. It is tested with a HERO13 Black, firmware 02.10 (`H24.01.02.10.00`), on Arch Linux, at 1080p and 30 fps. The `.deb` and `.rpm` packages install, run and uninstall cleanly on Debian 13, Ubuntu 24.04 and Fedora 44, but have not been tried there with a camera yet.
+**Status:** early. It is tested with a HERO13 Black, firmware 02.10 (`H24.01.02.10.00`), on Arch Linux, at 1080p and 720p, 30 fps. The `.deb` and `.rpm` packages install, run and uninstall cleanly on Debian 13, Ubuntu 24.04 and Fedora 44, but have not been tried there with a camera yet.
 
 Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -20,7 +20,7 @@ Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 1. Install the package
 
-Packages will be on the [releases page](https://github.com/darkodemic/gpwebcam/releases) from the first release on. Until then, build them as described in [CONTRIBUTING.md](CONTRIBUTING.md), then install them as below.
+Download the package for your distribution and architecture from the [releases page](https://github.com/darkodemic/gpwebcam/releases), then install it as below. To build it yourself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Arch Linux**
 
@@ -48,6 +48,13 @@ v4l2loopback is not in Fedora, and Fedora's own ffmpeg cannot decode H.264 witho
 sudo dnf install akmod-v4l2loopback v4l2loopback
 sudo dnf swap ffmpeg-free ffmpeg --allowerasing
 sudo dnf install ./gpwebcam-<version>.x86_64.rpm
+```
+
+**Upgrading.** After installing a newer package, let systemd read the new unit and start the new version:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user restart gpwebcam
 ```
 
 ### 2. Load the module

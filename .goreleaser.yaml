@@ -177,9 +177,10 @@ nfpms:
     formats: [archlinux]
     description: Use a GoPro connected over USB as a Linux webcam
 
+# The release notes are written by hand (see CONTRIBUTING.md); a list of
+# commits sorted by title said little.
 changelog:
-  use: git
-  sort: asc
+  disable: true
 
 release:
   github:
