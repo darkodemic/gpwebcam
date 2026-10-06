@@ -1,6 +1,6 @@
 # Release 0.2.0
 
-- **Status:** Planned 2026-10-07. Scope: everything on `main` since `v0.1.0` (15 commits, up to `86a5fea`). Open: the release notes (§4) and how GoReleaser writes them (R4).
+- **Status:** Published 2026-10-07: signed tag `v0.2.0` on `e8d08cf`, [release](https://github.com/darkodemic/gpwebcam/releases/tag/v0.2.0) with the notes from §4 (§5). Scope: everything on `main` since `v0.1.0`.
 - **Date:** 2026-10-07
 - **Owner:** Darko
 - **Related:** `release-0.1.0.md` (the same path for 0.1.0); `tray-and-recording.md`; `camera-on-demand.md`; `packaging-and-release.md` §6 (channels)
@@ -73,4 +73,6 @@ Install and setup: see [README.md](https://github.com/darkodemic/gpwebcam/blob/v
   - `doctor` in a container said "gpwebcam.service is disabled and " with an empty state: `is-enabled` reads unit files without the user manager, `is-active` cannot. An empty `is-active` now counts as "cannot reach this user's systemd".
   - Known and accepted: rpmlint `statically-linked-binary`, `position-independent-executable-suggested` and, for snapshots only, `incoherent-version-in-changelog`; namcap RELRO, PIE and "owned by 0:0"; namcap also suggests that `ffmpeg` may not be needed, because gpwebcam starts it at run time; Fedora's `ffmpeg-free` decodes H.264 only through openh264, as the README says.
 - 2026-10-07: R6 done by Dependabot, which closed PR #1: "Looks like github.com/godbus/dbus/v5 is up-to-date now, so this is no longer needed."
-- Next: merge the release preparation into `main`; Darko tests the Arch package built from that commit with the camera (R5); the tag (R7).
+- 2026-10-07: the release preparation merged as PR #3 (`e8d08cf`), CI green. R5 on the test machine: Darko did not test the Arch package built from `e8d08cf` again, because the features were tested on earlier builds; since then the code changed only by the move to `github.com/darkodemic/systray` v1.13.0 and the `doctor` fix, which CI and the container tests cover. The package was built (`go version -m`: systray v1.13.0, godbus v5.2.2, `vcs.modified=false`).
+- 2026-10-07, R7: signed annotated tag `v0.2.0` on `e8d08cf`, pushed alone; the release workflow made the draft in 38 s. Checked: nine assets; `checksums.txt` matches the amd64 archive, `.deb`, `.rpm` and Arch package; the binary says `gpwebcam 0.2.0`; `.deb`, `.rpm` (`rpm -qp` in a Fedora container) and the Arch package are `0.2.0-1`, and so is the Debian changelog. The notes from §4 were put on the draft, and it was published; GitHub marks it Latest.
+- Next: the list in §3.

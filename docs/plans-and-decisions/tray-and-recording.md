@@ -216,7 +216,8 @@ With every slice: README, man page, `doctor` (tray host, recordings folder), and
 - 2026-10-07: Darko proposed "Quit gpwebcam" at the bottom of the menu and a launcher in the applications menu, so the service can be brought back without a terminal; both were agreed. Quit stops the service through systemd (`GetUnitByPID`, then `Unit.Stop`), so systemd does not start it again; without systemd it just ends the process cleanly. The notification is sent synchronously (`notify.SendNow`), before the process goes away. Launcher: `packaging/desktop/gpwebcam.desktop` in `/usr/share/applications`, "GoPro Webcam", the icon `camera-web` from the theme until Darko makes his own; it runs `gpwebcam launch`, which starts the service through `Manager.StartUnit`, waits for it to become active and reports the outcome with a notification, because there is no terminal when started from the menu. `desktop-file-validate` reports nothing; `gpwebcam launch` while the service runs says "already running".
 - 2026-10-07: slice 3 committed together with Quit and the launcher (`ccabf7f`), CI green. The plans were translated into English, personal details of the test machine were removed from the whole history, and the rewritten history went to a new public repository `darkodemic/gpwebcam`; the old one stays private as `darkodemic/gpwebcam-private-archive`. `v0.1.0` published.
 - 2026-10-07: gpwebcam moves to `github.com/darkodemic/systray` v1.13.0 (§10).
-- Next: release 0.2.0.
+- 2026-10-07: everything in this plan is in release 0.2.0 (`release-0.2.0.md`).
+- Next: `release-0.2.0.md` §3.
 
 ## 10. Amendments
 
