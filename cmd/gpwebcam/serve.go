@@ -72,18 +72,23 @@ type server struct {
 	live   *live
 	notify *notify.Notifier // nil when notify-send is missing
 	feed   *feed.Feed
-	once   bool // gpwebcam start: one session, no tray
-	// res is the resolution of the device; a new one applies only when
-	// gpwebcam restarts, because applications keep the size they opened.
-	res    camera.Resolution
-	width  int
-	height int
+	once   bool   // gpwebcam start: one session, no tray
+	device string // /dev/videoN
 
-	render *placeholder.Renderer
-
-	mu       sync.Mutex
-	pictures map[string]*placeholder.Picture // by status line
-	reported map[string]bool                 // untested models already reported
+	mu sync.Mutex
+	// out is the open device, res its resolution and width and height its
+	// frame size; they change only in maybeResize, between sessions,
+	// because applications keep the size they started with.
+	out           *v4l2.Output
+	res           camera.Resolution
+	width, height int
+	resizeTried   camera.Resolution // a resolution the device kept at the last try
+	render        *placeholder.Renderer
+	pictures      map[string]*placeholder.Picture // by pictureKey
+	// shownStatus and shownAnimate are the placeholder last shown.
+	shownStatus  string
+	shownAnimate bool
+	reported     map[string]bool // untested models already reported
 	// The VAAPI probe runs once, when hwdec is first auto. gpuFailed is
 	// set after GPU decoding gave no video twice, until hwdec is turned
 	// off and on again.
@@ -196,13 +201,12 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 	res := set.Res
 	kept := false
 	if gw, gh := out.Size(); gw != w || gh != h {
 		// An application has the device open and keeps its size; writing
 		// frames of another size would garble the picture.
-		log.Warn("an application keeps the device at its size; the new resolution applies when gpwebcam restarts with the camera closed in every application",
+		log.Warn("an application keeps the device at its size; the new resolution applies once no application uses the camera",
 			"size", fmt.Sprintf("%dx%d", gw, gh), "wanted", fmt.Sprintf("%dx%d", w, h))
 		w, h, res, kept = gw, gh, camera.ResolutionFor(gw, gh), true
 	}
@@ -212,10 +216,15 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	}
 	s := &server{
 		f: f, log: log, live: lv, notify: notifier, feed: feed.New(out, idleInterval), once: once,
-		res: res, width: w, height: h,
+		device: device, out: out, res: res, width: w, height: h,
 		render: render, pictures: map[string]*placeholder.Picture{}, reported: map[string]bool{},
 		wake: make(chan struct{}, 1),
 	}
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.out.Close()
+	}()
 	if set.HWDec == "auto" {
 		s.hwaccel(ctx) // probe now, so the first session starts sooner
 	}
@@ -223,7 +232,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	log.Info("feeding loopback device", "device", device, "size", fmt.Sprintf("%dx%d", w, h))
 	if kept {
 		s.note(notify.Normal, "GoPro stays at "+fmt.Sprintf("%dx%d", w, h),
-			"An application has the camera open. Close it, then run: systemctl --user restart gpwebcam")
+			"An application has the camera open. The new resolution applies once no application uses the camera.")
 	}
 	if !once {
 		s.watchUsage(ctx, device)
@@ -280,9 +289,12 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 				log.Info("network interface renamed", "old", iface.Name)
 			case errors.Is(err, errUnplugged):
 				unplugged(iface)
+			case err != nil:
+				return err
 			}
 			continue
 		}
+		s.maybeResize(ctx)
 		s.showMoving(ctx, placeholder.WaitingNetwork(modelName(iface)))
 		var hw string
 		hw, err = s.session(ctx, iface)
@@ -417,6 +429,7 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 			s.show(ctx, placeholder.NotConnected)
 			shown = true
 		}
+		s.maybeResize(ctx)
 		// Log each new reason once, not on every poll.
 		if msg := err.Error(); msg != last {
 			last = msg
@@ -434,7 +447,7 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 
 // picture returns the placeholder for a status line, rendering it once.
 func (s *server) picture(ctx context.Context, status string, animate bool) *placeholder.Picture {
-	key := fmt.Sprintf("%t %s", animate, status)
+	key := pictureKey(status, animate)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p, ok := s.pictures[key]; ok {
@@ -473,6 +486,9 @@ func (s *server) showPicture(ctx context.Context, status string, animate bool, s
 	if err := s.feed.Idle(s.picture(ctx, status, animate)); err != nil {
 		s.log.Warn("write placeholder", "err", err)
 	}
+	s.mu.Lock()
+	s.shownStatus, s.shownAnimate = status, animate
+	s.mu.Unlock()
 	s.setStatus(st, trayStatus)
 }
 
@@ -487,6 +503,9 @@ func (s *server) noteConnected(iface usbnet.Interface) {
 	}
 	s.note(notify.Low, modelName(iface)+" connected", body)
 }
+
+// pictureKey identifies a placeholder in the pictures cache.
+func pictureKey(status string, animate bool) string { return fmt.Sprintf("%t %s", animate, status) }
 
 // testedModels are the cameras gpwebcam has been tested with, by USB
 // product string.
@@ -553,6 +572,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) (hw str
 // gets, with the given field of view and decoder. parent outlives ctx.
 func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, parent context.Context, iface usbnet.Interface, fov camera.FOV, hw string) error {
 	f, log := s.f, s.log
+	res, width, height := s.size()
 	go watchIface(ctx, iface, cancel)
 	go func() {
 		// Show the placeholder as soon as the cable is out, not when
@@ -578,7 +598,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 
 	cam := camera.NewClient(netip.AddrPortFrom(camAddr, camera.HTTPPort), host.Addr(), f.httpTimeout)
 	err = cam.StartWebcam(ctx, camera.StartOptions{
-		Res:       s.res,
+		Res:       res,
 		FOV:       fov,
 		Port:      f.port,
 		Poll:      500 * time.Millisecond,
@@ -612,7 +632,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 	if err != nil {
 		return ended(ctx, err)
 	}
-	log.Info("webcam started", "res", s.res, "fov", fov, "port", f.port, "hwdec", hw)
+	log.Info("webcam started", "res", res, "fov", fov, "port", f.port, "hwdec", hw)
 
 	kctx, cancelKeepAlive := context.WithCancel(ctx)
 	defer cancelKeepAlive()
@@ -632,7 +652,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 		log.Info("no video yet, stopping and starting the camera again")
 		err := cam.Stop(ctx)
 		if err == nil {
-			err = cam.Start(ctx, s.res, fov, f.port)
+			err = cam.Start(ctx, res, fov, f.port)
 		}
 		if err != nil && ctx.Err() == nil {
 			log.Warn("restart camera", "err", err)
@@ -642,8 +662,8 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 	err = stream.Run(ctx, stream.Config{
 		FFmpeg:      f.ffmpeg,
 		Listen:      netip.AddrPortFrom(host.Addr(), f.port),
-		Width:       s.width,
-		Height:      s.height,
+		Width:       width,
+		Height:      height,
 		ReadTimeout: 5 * time.Second,
 		FirstFrame:  firstFrame,
 		HWAccel:     hw,
@@ -654,7 +674,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 		videoFlowing.Do(func() {
 			gotVideo.Store(true)
 			log.Info("video is flowing")
-			s.setStatus(tray.Live, fmt.Sprintf("%s: %sp, %s", modelName(iface), s.res, fov))
+			s.setStatus(tray.Live, fmt.Sprintf("%s: %sp, %s", modelName(iface), res, fov))
 		})
 		return s.feed.Live(frame)
 	})

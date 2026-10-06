@@ -2,6 +2,7 @@ package feed
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -86,5 +87,39 @@ func TestFeedAnimates(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	if rec.count("a") == 0 || rec.count("b") == 0 {
 		t.Errorf("animation steps written: a=%d b=%d", rec.count("a"), rec.count("b"))
+	}
+}
+
+func TestFeedSwap(t *testing.T) {
+	old, next := &recorder{}, &recorder{}
+	f := New(old, time.Hour)
+	if err := f.Idle(Still("small")); err != nil {
+		t.Fatal(err)
+	}
+	err := f.Swap(func(s Sink) (Sink, Source, error) {
+		if s != old {
+			t.Error("swap did not get the current sink")
+		}
+		return next, Still("large"), nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.count("large") != 1 {
+		t.Error("the new idle picture was not written at once")
+	}
+	if err := f.Live([]byte("frame")); err != nil {
+		t.Fatal(err)
+	}
+	if next.count("frame") != 1 || old.count("frame") != 0 {
+		t.Error("live frames do not go to the new sink")
+	}
+
+	// A failed swap keeps the sink.
+	if err := f.Swap(func(Sink) (Sink, Source, error) { return nil, nil, errors.New("no device") }); err == nil {
+		t.Error("failed swap reported no error")
+	}
+	if err := f.Live([]byte("again")); err != nil || next.count("again") != 1 {
+		t.Errorf("after a failed swap: %v", err)
 	}
 }

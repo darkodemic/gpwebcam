@@ -107,7 +107,7 @@ While the service runs, a camera icon in the system tray shows the state: white 
 - the camera's state, for example "GoPro HERO13 Black: 1080p, linear";
 - **Camera**: On demand (the default; streams while an application uses the camera), Always on (streams while it is connected) or Off (never streams; the picture says so).
 - **Field of view**: Wide, Narrow, SuperView or Linear. The camera restarts with the new one, which takes about 4 seconds; applications keep the camera open meanwhile.
-- **Resolution**: 1080p or 720p. Applications keep the frame size they opened the camera with, so a new resolution applies when gpwebcam restarts: run `systemctl --user restart gpwebcam`, then reopen the camera in the application.
+- **Resolution**: 1080p or 720p. Applications keep the frame size they started the video with, so a new resolution applies once no application uses the camera; turn the video off and on again in the application.
 - **Hardware decoding** and **Notifications**, on or off.
 - **Restart gpwebcam**, when it runs as the systemd service.
 - **Hide icon**. Bring it back with `gpwebcam config tray on`.
@@ -132,7 +132,7 @@ gpwebcam config fov wide   # change one
 | `notify` | `on` | `on`, `off` |
 | `tray` | `on` | `on`, `off` |
 
-The running service applies a change within about 2 seconds; a new resolution applies when it restarts. A flag of the same name given to `gpwebcam run` overrides the file (see [Options](#options)), and the tray menu then marks that item as set by a flag.
+The running service applies a change within about 2 seconds; a new resolution applies once no application uses the camera. A flag of the same name given to `gpwebcam run` overrides the file (see [Options](#options)), and the tray menu then marks that item as set by a flag.
 
 ### Camera models
 
@@ -231,7 +231,7 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 | "Camera cannot start. Is its battery in and charged?", or `the camera cannot start capturing` in the log | The camera refused to start with error 4. Once in a while, right after a restart, this passes by itself: gpwebcam tries three times a second apart, then again every few seconds. If it repeats, the camera may be running without its battery: a HERO13 Black kept an existing stream going without one, but refused every new start. Put a charged battery in, turn the camera off, then turn it on and plug the cable back in. |
 | `the camera reports streaming, but no video arrived` | gpwebcam retries by itself. If it keeps happening, a firewall or VPN is dropping the video: allow incoming UDP port 8554 on the GoPro connection. |
 | An application does not list the camera | The service was not running when the application started. Start the service, then restart the application once. |
-| `an application keeps the device at its size` | gpwebcam started while an application had the camera open, so the device kept its old size and a new resolution could not apply. gpwebcam goes on at the old size. Close the camera in every application, then run `systemctl --user restart gpwebcam`. |
+| `an application keeps the device at its size` | An application had the camera open when gpwebcam started or changed the resolution, so the device kept its old size. gpwebcam goes on at that size and tries again when applications start or stop using the camera; closing the camera in every application lets the new resolution apply. |
 | The camera does not start when an application opens it | With camera mode `demand`, gpwebcam starts the camera when the application turns its video on, not when it lists cameras; give it about 5 seconds. `gpwebcam doctor` says whether your v4l2loopback reports applications at all; if not, the camera streams whenever it is connected. Mode `off` never starts it. |
 | No tray icon | The desktop has no system tray (GNOME needs the AppIndicator extension), or the icon was hidden: `gpwebcam config tray on`. `gpwebcam doctor` checks both. |
 | `settings file not used` or `settings file changed but cannot be used` | The settings file has an unknown setting or value; the log says which. gpwebcam keeps the defaults or the last good settings. Fix it with `gpwebcam config`, or delete the file. |

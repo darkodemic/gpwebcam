@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -40,6 +41,10 @@ func (s *server) watchUsage(ctx context.Context, device string) {
 			if s.used.Swap(used) == used {
 				return
 			}
+			// Whoever kept the device's size may be gone now.
+			s.mu.Lock()
+			s.resizeTried = ""
+			s.mu.Unlock()
 			if used {
 				s.log.Info("an application started using the camera")
 			} else {
@@ -89,6 +94,9 @@ func (s *server) idle(parent context.Context, iface usbnet.Interface) error {
 	defer t.Stop()
 	shown := ""
 	for !s.wantCamera() {
+		if err := s.feed.Err(); err != nil {
+			return fmt.Errorf("write placeholder: %w", err)
+		}
 		// The mode can change between off and demand while idle.
 		if mode := s.live.Get().Camera; mode != shown {
 			shown = mode
@@ -99,6 +107,7 @@ func (s *server) idle(parent context.Context, iface usbnet.Interface) error {
 				s.showCalm(ctx, placeholder.Ready(model), model+": ready, starts when an application uses it")
 			}
 		}
+		s.maybeResize(ctx)
 		select {
 		case <-ctx.Done():
 			return ended(ctx, nil)
@@ -136,6 +145,12 @@ func (s *server) watchDemand(ctx context.Context, cancel context.CancelCauseFunc
 		case <-t.C:
 		}
 		switch {
+		case s.live.Get().Camera == settings.CameraAlways && s.resizeWanted():
+			// Always on never ends a session by itself; end it so that
+			// the device can take the new size.
+			s.log.Info("no application uses the camera; stopping it to change the resolution")
+			cancel(errReconfigured)
+			return
 		case s.wantCamera():
 			since = time.Time{}
 		case since.IsZero():

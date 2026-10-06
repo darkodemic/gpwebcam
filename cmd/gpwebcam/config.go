@@ -14,8 +14,8 @@ const configUsage = `usage: gpwebcam config [<setting> [<value>]]
 
 Shows or changes the settings that the tray menu changes too. Without
 arguments it prints them all. A running "gpwebcam run" applies a change
-within a few seconds; a new resolution applies when it restarts. A flag
-given to "gpwebcam run" overrides the file.
+within a few seconds; a new resolution applies once no application uses
+the camera. A flag given to "gpwebcam run" overrides the file.
 
 settings:
   camera  demand (while an application uses it), always or off

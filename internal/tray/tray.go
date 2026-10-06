@@ -186,7 +186,7 @@ func (t *Tray) run() {
 		it.ress[r] = it.res.AddSubMenuItemCheckbox(resLabels[r], "", false)
 		forward(it.ress[r], func() click { return click{"res", string(r)} })
 	}
-	it.resPending = it.res.AddSubMenuItem("Applies when gpwebcam restarts", "")
+	it.resPending = it.res.AddSubMenuItem("Applies once no application uses the camera", "")
 	it.resPending.Disable()
 	it.hwdec = systray.AddMenuItemCheckbox("Hardware decoding", "Decode on the GPU through VAAPI when it works", false)
 	forward(it.hwdec, func() click { return click{key: "hwdec"} })

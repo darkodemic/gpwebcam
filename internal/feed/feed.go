@@ -53,6 +53,21 @@ func (f *Feed) Idle(src Source) error {
 	return f.sink.WriteFrame(src.Frame(0))
 }
 
+// Swap replaces the sink while no frame is written. swap gets the current
+// sink and returns the new one with the idle picture for it, which is
+// written at once. If swap fails, the feed keeps the current sink, so swap
+// must leave that one usable.
+func (f *Feed) Swap(swap func(old Sink) (Sink, Source, error)) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	sink, src, err := swap(f.sink)
+	if err != nil {
+		return err
+	}
+	f.sink, f.idle, f.idleSince, f.err = sink, src, f.now(), nil
+	return sink.WriteFrame(src.Frame(0))
+}
+
 // Live writes a camera frame and stops the idle repeats.
 func (f *Feed) Live(frame []byte) error {
 	f.mu.Lock()

@@ -46,8 +46,9 @@ the placeholder while it is not, with the tray icon. This is what the
 systemd user service
 .B gpwebcam.service
 runs. It applies a changed setting within about 2 seconds: a new field of
-view or decoder restarts the camera; a new resolution applies when
-gpwebcam restarts, because applications keep the frame size they opened.
+view or decoder restarts the camera; a new resolution applies once no
+application uses the camera, because applications keep the frame size they
+started with.
 .TP
 .B start
 Stream one camera session and exit when it ends.

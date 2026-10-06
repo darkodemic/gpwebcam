@@ -27,8 +27,15 @@ func (s *server) settingsChanged(old, cur settings.Settings) {
 		}
 		s.kick()
 	}
-	if cur.Res != old.Res && cur.Res != s.res {
-		s.log.Info("the new resolution applies when gpwebcam restarts", "in_use", s.res, "next", cur.Res)
+	if cur.Res != old.Res {
+		s.mu.Lock()
+		s.resizeTried = ""
+		inUse := s.res
+		s.mu.Unlock()
+		if cur.Res != inUse {
+			s.log.Info("the new resolution applies once no application uses the camera", "in_use", inUse, "next", cur.Res)
+		}
+		s.kick()
 	}
 	if cur.Tray != old.Tray {
 		if cur.Tray {
