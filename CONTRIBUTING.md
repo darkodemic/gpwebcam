@@ -85,12 +85,22 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 
-To release: add an entry for the version to `packaging/changelog.yml` (it becomes the Debian changelog and the RPM `%changelog`), make sure `main` is green, then tag and push:
+To release:
 
-```sh
-git tag -a v0.1.0 -m "gpwebcam 0.1.0"
-git push origin v0.1.0
-```
+1. Add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the RPM `%changelog`), and write the release notes in a plan, as `docs/plans-and-decisions/release-0.2.0.md` §4 does.
+2. Make sure `main` is green, then tag and push:
+
+   ```sh
+   git tag -s v0.2.0 -m "gpwebcam 0.2.0"
+   git push origin v0.2.0
+   ```
+
+3. GoReleaser leaves the notes empty (`changelog.disable`). Put the notes on the draft, check it, and publish it:
+
+   ```sh
+   gh release edit v0.2.0 --notes-file notes.md
+   gh release edit v0.2.0 --draft=false
+   ```
 
 ## Rules for the code
 
