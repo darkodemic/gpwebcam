@@ -370,7 +370,8 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 // the camera stayed connected.
 func retryStatus(err error, noVideo int, model string) string {
 	switch {
-	case errors.Is(err, stream.ErrNoVideo) && noVideo >= noVideoHint:
+	case errors.Is(err, stream.ErrNoPackets) && noVideo >= noVideoHint:
+		// Only when nothing arrives at all is a firewall a likely cause.
 		return placeholder.NoVideo
 	case errors.Is(err, stream.ErrNoVideo):
 		return placeholder.Retrying(model)
@@ -662,11 +663,17 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 	err = stream.Run(ctx, stream.Config{
 		FFmpeg:      f.ffmpeg,
 		Listen:      netip.AddrPortFrom(host.Addr(), f.port),
+		Camera:      camAddr,
 		Width:       width,
 		Height:      height,
 		ReadTimeout: 5 * time.Second,
 		FirstFrame:  firstFrame,
 		HWAccel:     hw,
+		OnStats: func(st stream.Stats) {
+			if st.Dropped > 0 || st.Foreign > 0 {
+				log.Warn("datagrams lost or ignored", "received", st.Packets, "dropped", st.Dropped, "from_elsewhere", st.Foreign)
+			}
+		},
 	}, newLineLogger(log, "ffmpeg"), 3*time.Second, func(frame []byte) error {
 		if ctx.Err() != nil {
 			return nil // ending: leave the device to the placeholder

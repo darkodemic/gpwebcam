@@ -1,5 +1,6 @@
-// Package stream runs ffmpeg, which receives the camera's MPEG-TS stream over
-// UDP, decodes it and hands gpwebcam raw frames through a pipe.
+// Package stream receives the camera's MPEG-TS stream over UDP and runs
+// ffmpeg, which decodes it from a pipe and hands gpwebcam raw frames through
+// another pipe.
 package stream
 
 import (
@@ -19,31 +20,37 @@ import (
 )
 
 // ErrNoVideo means the camera reported a running stream, but no frame
-// arrived within Config.FirstFrame.
-var ErrNoVideo = errors.New("the camera reports streaming, but no video arrived; a firewall or VPN may be dropping UDP, or the camera did not really start")
+// arrived within Config.FirstFrame. ErrNoPackets, which matches it, says
+// that not even a datagram arrived.
+var (
+	ErrNoVideo   = errors.New("the camera reports streaming, but no video arrived")
+	ErrNoPackets = fmt.Errorf("%w: no packet reached gpwebcam; a firewall or VPN may be dropping UDP, or the camera did not really start", ErrNoVideo)
+)
 
 // Config describes one ffmpeg run. Every field is validated by the caller's
 // types or by Validate, so nothing unchecked reaches the argument list.
 type Config struct {
 	FFmpeg string         // ffmpeg executable, looked up in PATH if it has no slash
 	Listen netip.AddrPort // host address on the GoPro link; never unspecified
+	// Camera, when valid, is the only sender whose datagrams count.
+	Camera netip.Addr
 	// Width and Height are the size of the frames gpwebcam gets; ffmpeg scales
 	// to them, so they always match the loopback device's format.
 	Width, Height int
-	// ReadTimeout makes ffmpeg exit when no packet arrives for this long,
-	// for example after the camera is unplugged. While opening the input,
-	// ffmpeg reads several times, so with no stream at all it gives up
-	// after about four timeouts (measured with ffmpeg 9.0.2).
+	// ReadTimeout ends the run when no datagram arrives for this long, for
+	// example after the camera is unplugged. Before the first datagram
+	// FirstFrame applies instead, when it is set.
 	ReadTimeout time.Duration
 	// HWAccel is "vaapi" to decode on the GPU through VAAPI, or "" or
 	// "none" to decode in software. ffmpeg does not fall back by itself
 	// when VAAPI fails to start, so check it first with ProbeVAAPI.
 	HWAccel string
 	// FirstFrame, when positive, ends the run with ErrNoVideo if no frame
-	// arrives this long after ffmpeg starts. It catches a camera that
-	// reports streaming but sends nothing much sooner than ReadTimeout,
-	// which ffmpeg applies several times while it opens the input.
+	// arrives this long after ffmpeg starts, which catches a camera that
+	// reports streaming but sends nothing.
 	FirstFrame time.Duration
+	// OnStats, if set, gets the receiver's counts when the run ends.
+	OnStats func(Stats)
 }
 
 // Validate rejects configurations that would make ffmpeg listen beyond the
@@ -55,6 +62,9 @@ func (c Config) Validate() error {
 	}
 	if c.Listen.Port() == 0 {
 		return fmt.Errorf("listen port must not be 0")
+	}
+	if c.Camera.IsValid() && (!c.Camera.Is4() || c.Camera.IsUnspecified() || c.Camera.IsMulticast()) {
+		return fmt.Errorf("camera address %s: must be a unicast IPv4 address", c.Camera)
 	}
 	if c.ReadTimeout <= 0 {
 		return fmt.Errorf("read timeout must be positive")
@@ -78,11 +88,6 @@ func (c Config) FrameSize() int { return c.Width * c.Height * 3 / 2 }
 
 // Args returns ffmpeg's argument list, without the program name.
 func (c Config) Args() []string {
-	// For input, ffmpeg binds the UDP socket to the host in the URL
-	// (checked with ffmpeg 9.0.2), so only the GoPro link can feed it.
-	// timeout is in microseconds and applies to reads only.
-	url := fmt.Sprintf("udp://%s?timeout=%d&overrun_nonfatal=1",
-		c.Listen, c.ReadTimeout.Microseconds())
 	var hw []string
 	if c.HWAccel == "vaapi" {
 		// Measured 2026-10-05 on an AMD GPU, 1080p30 H.264: 9.5 % of one
@@ -106,8 +111,9 @@ func (c Config) Args() []string {
 		"-flags", "low_delay",
 		"-analyzeduration", "1000000",
 	}, append(hw,
+		// gpwebcam receives the UDP datagrams and writes them to stdin.
 		"-f", "mpegts",
-		"-i", url,
+		"-i", "pipe:0",
 		// The TS also carries AAC, an empty AC3 track and a private data
 		// stream; only the video goes to the loopback device.
 		"-map", "0:v:0",
@@ -125,13 +131,22 @@ func (c Config) Args() []string {
 	)...)
 }
 
-// Run starts ffmpeg and passes every decoded frame to sink until ffmpeg
-// exits. The slice is reused for the next frame. Cancelling ctx sends
-// SIGTERM, then SIGKILL after grace; a sink error stops ffmpeg the same way.
-// ffmpeg's stderr is copied to logs.
+// Run listens for the camera's datagrams, starts ffmpeg on them and passes
+// every decoded frame to sink until the run ends. The slice is reused for
+// the next frame. Cancelling ctx sends SIGTERM, then SIGKILL after grace; a
+// sink error or missing datagrams stop ffmpeg the same way. ffmpeg's stderr
+// is copied to logs.
 func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sink func([]byte) error) error {
 	if err := c.Validate(); err != nil {
 		return err
+	}
+	rcv, err := listen(c.Listen, c.Camera)
+	if err != nil {
+		return err
+	}
+	defer rcv.close()
+	if c.OnStats != nil {
+		defer func() { c.OnStats(rcv.stats()) }()
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -139,10 +154,22 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	if err != nil {
 		return err
 	}
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		r.Close()
+		w.Close()
+		return err
+	}
 	cmd := exec.CommandContext(runCtx, c.FFmpeg, c.Args()...)
+	cmd.Stdin = inR
 	cmd.Stdout = w
 	cmd.Stderr = logs
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.Cancel = func() error {
+		// ffmpeg waiting for input on the pipe does not act on SIGTERM;
+		// the end of its input makes it exit at once.
+		inW.Close()
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
 	cmd.WaitDelay = grace
 	// Die with gpwebcam even if gpwebcam is killed without a chance to clean up.
 	// Pdeathsig fires when the forking OS thread exits, so keep this
@@ -153,10 +180,46 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	if err := cmd.Start(); err != nil {
 		r.Close()
 		w.Close()
+		inR.Close()
+		inW.Close()
 		return fmt.Errorf("start ffmpeg: %w", err)
 	}
-	// ffmpeg holds the write end now; reads see EOF once it exits.
+	// ffmpeg holds its ends now: reads of frames see EOF once it exits, and
+	// writes of datagrams fail.
 	w.Close()
+	inR.Close()
+	go rcv.read()
+	go func() {
+		_ = rcv.pump(inW)
+		inW.Close()
+	}()
+
+	// The camera stops sending when it is unplugged or switched off.
+	var lost atomic.Bool
+	start := time.Now()
+	go func() {
+		t := time.NewTicker(c.ReadTimeout / 10)
+		defer t.Stop()
+		for {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-t.C:
+			}
+			d, ok := rcv.sinceLast()
+			if !ok {
+				if c.FirstFrame > 0 {
+					continue
+				}
+				d = time.Since(start)
+			}
+			if d > c.ReadTimeout {
+				lost.Store(true)
+				cancel()
+				return
+			}
+		}
+	}()
 
 	var sinkErr error
 	var gotFrame, noVideo atomic.Bool
@@ -188,19 +251,25 @@ func Run(ctx context.Context, c Config, logs io.Writer, grace time.Duration, sin
 	}()
 	err = cmd.Wait()
 	<-done
+	rcv.close() // ends read, and with it pump
 	switch {
 	case ctx.Err() != nil:
 		// Stopped on request; ffmpeg's exit status after SIGTERM is noise.
 		return nil
 	case sinkErr != nil:
 		return fmt.Errorf("write frame: %w", sinkErr)
+	case noVideo.Load() && rcv.packets.Load() == 0:
+		return fmt.Errorf("%w (waited %v)", ErrNoPackets, c.FirstFrame)
 	case noVideo.Load():
-		return fmt.Errorf("%w (waited %v)", ErrNoVideo, c.FirstFrame)
+		return fmt.Errorf("%w: %d datagrams arrived, but ffmpeg decoded no frame (waited %v)", ErrNoVideo, rcv.packets.Load(), c.FirstFrame)
+	case lost.Load() && rcv.packets.Load() == 0:
+		return fmt.Errorf("%w (waited %v)", ErrNoPackets, c.ReadTimeout)
+	case lost.Load():
+		return fmt.Errorf("no video from the camera for %v; was it unplugged or switched off?", c.ReadTimeout)
 	case err != nil:
 		return fmt.Errorf("ffmpeg: %w", err)
 	}
-	// With UDP input ffmpeg ends cleanly only when the read timeout fires.
-	return fmt.Errorf("no video from the camera for %v; was it unplugged or switched off?", c.ReadTimeout)
+	return errors.New("ffmpeg ended by itself")
 }
 
 // ProbeVAAPI reports whether ffmpeg can open a VAAPI device, by creating

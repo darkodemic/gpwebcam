@@ -20,7 +20,7 @@ When work changes what a plan says, update that plan in the same session.
 - No root at runtime. Root is needed only to install the package, which ships the module config in `/usr/lib/modules-load.d/` and `/usr/lib/modprobe.d/`. Never unload or reload v4l2loopback, because other devices (OBS) may use it.
 - Packages put files only under `/usr` (see ADR 0005), never in `/etc` or `$HOME`, and never enable or start the user service themselves.
 - Never run anything through a shell. Start ffmpeg with `os/exec` and an argument list.
-- ffmpeg listens only on the host's IP address on the GoPro interface, never on `0.0.0.0`.
+- gpwebcam receives the camera's stream only on the host's IP address on the GoPro interface, never on `0.0.0.0`, and only from the camera's address; ffmpeg reads it from a pipe and opens no socket.
 - Validate every input: enums for resolution and FOV, range-checked numbers for port and device number.
 - Give every HTTP call to the camera a timeout. On SIGTERM, send STOP to the camera and stop ffmpeg.
 - Do not guess the network interface. Find it by USB vendor ID `2672` in sysfs.

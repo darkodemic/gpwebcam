@@ -103,7 +103,7 @@ Kamera šalje stream na jedan UDP port, pa snimanje mora da koristi isti prijem 
 | A: ffmpeg se restartuje sa drugim izlazom (kopija u fajl) | mala izmena | webcam slika nestaje 1 do 2 s pri svakom pokretanju i zaustavljanju snimanja |
 | B: `gpwebcam` sam prima UDP i šalje pakete ffmpeg-u za webcam i, dok snima, snimaču | snimanje bez prekida slike; watchdog za pakete iz `first-slice-gw-start.md` §8 dobija se usput | menja put koji je podešen na 0.18 s kašnjenja; mora ponovo da se izmeri |
 
-Predlog: B. Pravilo da se sluša samo na IP adresi hosta na GoPro interfejsu ostaje (`net.ListenUDP` na toj adresi).
+Odlučeno: B, urađeno 2026-10-06 (presek 2, §9). Pravilo da se sluša samo na IP adresi hosta na GoPro interfejsu ostaje (`net.ListenUDP` na toj adresi), a datagrami se primaju još samo sa adrese kamere.
 
 ```mermaid
 flowchart LR
@@ -192,4 +192,11 @@ Uz svaki presek: README, man stranica, `doctor` (tray host, folder za snimke) i 
   - Test za `toggle-type` i `toggle-state`, grupa "Size" u primeru, README. Testovi prolaze, Windows build prolazi; primer pokrenut na Quickshell-u vraća `toggle-type` `radio` kroz `GetLayout`. Windows test fajl se na upstream `master`-u ne kompajlira ni bez ove izmene (`systray_windows_test.go:47`, stara signatura).
   - gpwebcam: tri poziva u `internal/tray/tray.go` prešla na `AddSubMenuItemRadio`.
 - 2026-10-06: Darko odlučio da gpwebcam pređe na fork (§3.2). `go.mod`: `replace fyne.io/systray => github.com/darkodemic/systray v1.12.3-0.20261006205618-9c45f672f861`, commit `9c45f67` sa grane `radio-menu-items`. Provereno bez `go.work`: `gofmt`, `go vet` i `go test -race` prolaze na Go 1.27.1 i 1.22.12; `goreleaser release --snapshot --clean` pravi svih šest paketa; binarni fajl je i dalje statički, a `go version -m` pokazuje fork.
-- Sledeće: rad na zahtev, pa presek 2. PR #135 čeka review u `fyne-io/systray`.
+- 2026-10-06: rad na zahtev završen (`camera-on-demand.md`, commit-i `ee8ee18` i `99a6349`).
+- 2026-10-06, presek 2 napisan u worktree-ju `.worktrees/receive-udp`, grana `feat/receive-udp-in-gpwebcam` (testovi prolaze sa `-race`, i na pravom Go 1.22):
+  - `internal/stream/receive.go`: `net.ListenUDP` na adresi hosta, samo datagrami sa adrese kamere (ostali se broje kao tuđi); red od 2048 datagrama (oko 3.5 s) između socket-a i ffmpeg-ovog stdin-a, pa spor ffmpeg ne blokira socket, nego se višak odbacuje i broji, kao ranije `overrun_nonfatal`.
+  - ffmpeg čita `-f mpegts -i pipe:0` i više ne otvara socket. Čuvar za pakete je sada u gpwebcam-u: `ReadTimeout` od poslednjeg datagrama, a pre prvog važi `FirstFrame`.
+  - Greške: `ErrNoPackets` (nijedan datagram, verovatno firewall ili VPN) i `ErrNoVideo` sa brojem datagrama kad stižu, a ffmpeg ništa ne dekodira. Savet o firewall-u na zamenskoj slici sada ide samo uz `ErrNoPackets`. Brojači (primljeno, odbačeno, tuđe) idu u log kad nešto fali.
+  - ffmpeg koji čeka na pipe-u ne reaguje na SIGTERM; prekid sada prvo zatvori njegov stdin, pa ffmpeg izlazi odmah (test prekida: 0.3 s umesto 2.3 s, odnosno umesto `grace`).
+  - Kašnjenje, novi test `TestLatency` (`GPWEBCAM_LATENCY=1`): lokalni libx264 640x360 30 fps, broj frejma upisan u piksele, vreme slanja iz `showinfo`; 390 frejmova po merenju. Stari put (ffmpeg sluša UDP, `main` `99a6349`): medijana 134 ms softverski, 135 ms VAAPI; novi: 134 ms i 135 ms; p90 135 i 136 ms u oba. Sopstveni prijem ne dodaje kašnjenje. Stalnih oko 134 ms (4 frejma) je u putu pošiljalac i dekoder, isto za obe verzije; zato test poredi verzije, a ne meri kašnjenje kamere.
+- Sledeće: proba uživo sa kamerom (da li kamera šalje sa svoje adrese), commit preseka 2, pa presek 3 (snimanje).

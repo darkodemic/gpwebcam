@@ -28,8 +28,11 @@ func TestArgs(t *testing.T) {
 	if i < 0 || i+1 >= len(args) {
 		t.Fatalf("no -i in %q", args)
 	}
-	if want := "udp://172.25.187.52:8554?timeout=10000000&overrun_nonfatal=1"; args[i+1] != want {
-		t.Errorf("input URL = %q, want %q", args[i+1], want)
+	if args[i+1] != "pipe:0" {
+		t.Errorf("input = %q, want pipe:0: gpwebcam receives the datagrams", args[i+1])
+	}
+	if slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, "udp:") }) {
+		t.Errorf("ffmpeg must not open a UDP socket: %q", args)
 	}
 	// Low-latency flags must be input options.
 	for _, flag := range []string{"-fflags", "-flags", "-analyzeduration", "-f"} {
@@ -76,6 +79,13 @@ func TestValidate(t *testing.T) {
 			t.Errorf("listen %s accepted", listen)
 		}
 	}
+	for _, cam := range []string{"0.0.0.0", "239.1.1.1", "::1"} {
+		c := testConfig()
+		c.Camera = netip.MustParseAddr(cam)
+		if err := c.Validate(); err == nil {
+			t.Errorf("camera %s accepted", cam)
+		}
+	}
 	for _, size := range [][2]int{{0, 1080}, {1920, -2}, {1921, 1080}} {
 		c := testConfig()
 		c.Width, c.Height = size[0], size[1]
@@ -103,8 +113,8 @@ func noFrames(t *testing.T) func([]byte) error {
 	}
 }
 
-// TestRunTimesOut starts the real ffmpeg on loopback with nothing sending to
-// it: the read timeout must end the run with an error.
+// TestRunTimesOut starts the real ffmpeg with nothing sending: the read
+// timeout must end the run with ErrNoPackets.
 func TestRunTimesOut(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
@@ -116,16 +126,13 @@ func TestRunTimesOut(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err := Run(ctx, c, &logs, time.Second, noFrames(t))
-	if err == nil || ctx.Err() != nil {
-		t.Fatalf("Run = %v (ctx %v), want an ffmpeg error before the deadline; logs:\n%s", err, ctx.Err(), logs.String())
-	}
-	if !strings.Contains(err.Error(), "ffmpeg") {
-		t.Errorf("error %q does not name ffmpeg", err)
+	if !errors.Is(err, ErrNoPackets) || ctx.Err() != nil {
+		t.Fatalf("Run = %v (ctx %v), want ErrNoPackets before the deadline; logs:\n%s", err, ctx.Err(), logs.String())
 	}
 }
 
 // TestRunNoFirstFrame: with nothing sending, FirstFrame must end the run
-// with ErrNoVideo long before ffmpeg's own read timeouts.
+// with ErrNoPackets, which matches ErrNoVideo, before the read timeout.
 func TestRunNoFirstFrame(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
@@ -138,11 +145,37 @@ func TestRunNoFirstFrame(t *testing.T) {
 	defer cancel()
 	start := time.Now()
 	err := Run(ctx, c, &bytes.Buffer{}, time.Second, noFrames(t))
-	if !errors.Is(err, ErrNoVideo) {
-		t.Fatalf("Run = %v, want ErrNoVideo", err)
+	if !errors.Is(err, ErrNoVideo) || !errors.Is(err, ErrNoPackets) {
+		t.Fatalf("Run = %v, want ErrNoPackets", err)
 	}
 	if d := time.Since(start); d > 4*time.Second {
 		t.Errorf("gave up after %v", d)
+	}
+}
+
+// TestRunIgnoresOtherSenders: datagrams from an address other than the
+// camera's must not reach ffmpeg.
+func TestRunIgnoresOtherSenders(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	c := testConfig()
+	c.Listen = netip.MustParseAddrPort("127.0.0.1:47559")
+	c.Camera = netip.MustParseAddr("127.0.0.9") // the sender is 127.0.0.1
+	c.Width, c.Height = 320, 240
+	c.ReadTimeout = 30 * time.Second
+	c.FirstFrame = 2 * time.Second
+	var stats Stats
+	c.OnStats = func(s Stats) { stats = s }
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	sendTS(t, ctx, c.Listen, "5")
+	err := Run(ctx, c, &bytes.Buffer{}, time.Second, noFrames(t))
+	if !errors.Is(err, ErrNoPackets) {
+		t.Fatalf("Run = %v, want ErrNoPackets", err)
+	}
+	if stats.Packets != 0 || stats.Foreign == 0 {
+		t.Errorf("stats %+v, want only foreign datagrams", stats)
 	}
 }
 
@@ -180,6 +213,8 @@ func TestRunStreamStops(t *testing.T) {
 	sendTS(t, ctx, c.Listen, "3")
 
 	frames := 0
+	var stats Stats
+	c.OnStats = func(s Stats) { stats = s }
 	err := Run(ctx, c, &bytes.Buffer{}, time.Second, func(f []byte) error {
 		if len(f) != 640*360*3/2 {
 			t.Errorf("frame is %d bytes", len(f))
@@ -192,6 +227,9 @@ func TestRunStreamStops(t *testing.T) {
 	}
 	if frames < 30 {
 		t.Errorf("got %d frames from a 3 s stream", frames)
+	}
+	if stats.Packets == 0 || stats.Bytes == 0 || stats.Dropped != 0 {
+		t.Errorf("stats %+v, want datagrams and no drops", stats)
 	}
 }
 
@@ -233,7 +271,9 @@ func TestRunCancel(t *testing.T) {
 	if err := Run(ctx, c, &bytes.Buffer{}, 2*time.Second, noFrames(t)); err != nil {
 		t.Fatalf("Run after cancel = %v, want nil", err)
 	}
-	if d := time.Since(start); d > 3*time.Second {
+	// ffmpeg ignores SIGTERM while it waits on its input pipe; closing
+	// the pipe must stop it well before the 2 s grace period.
+	if d := time.Since(start); d > 1500*time.Millisecond {
 		t.Errorf("stopping took %v", d)
 	}
 }

@@ -19,7 +19,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/tray` | The tray icon and its menu through `fyne.io/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
-| `internal/stream` | Runs ffmpeg, which decodes the camera's MPEG-TS stream and hands raw frames over a pipe. |
+| `internal/stream` | Receives the camera's MPEG-TS datagrams over UDP, watches that they keep coming, and runs ffmpeg, which decodes them from one pipe and hands raw frames back over another. |
 | `internal/feed` | Keeps the loopback device supplied: live frames, or the placeholder between them. |
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
@@ -36,9 +36,10 @@ go test ./...
 go test -race ./...
 ```
 
-- Some tests start the real ffmpeg on the loopback network interface; they are skipped when ffmpeg is missing. No camera is needed.
+- Some tests send a stream over the loopback network interface to the receiver and start the real ffmpeg; they are skipped when ffmpeg is missing. No camera is needed.
+- `GPWEBCAM_LATENCY=1 go test -run TestLatency -v ./internal/stream` measures the delay from a local H.264 sender to the frames gpwebcam gets (add `GPWEBCAM_LATENCY_HW=vaapi` for GPU decoding). It needs ffmpeg with libx264 and takes about 20 seconds. The sender's encoding is part of the number, so use it to compare two versions of the code, not as the camera's latency.
 - To embed a version: `go build -ldflags "-X main.version=$(git describe --always --dirty)" -o gpwebcam ./cmd/gpwebcam`.
-- To check that the code still builds with the oldest supported Go: `mise exec go@1.22 -- go test ./...`.
+- To check that the code still builds with the oldest supported Go: `mise exec go@1.22 -- env -u GOROOT -u GOBIN GOTOOLCHAIN=local go test ./...`. Without unsetting them, a `GOROOT` exported by an activated mise shell makes Go switch to the newer toolchain silently.
 - The man page is `packaging/man/gpwebcam.1`; preview it with `man -l packaging/man/gpwebcam.1` and check it with `groff -man -ww -z packaging/man/gpwebcam.1`. GoReleaser compresses it before packaging.
 
 ### Run it against a camera
@@ -94,7 +95,7 @@ git push origin v0.1.0
 
 - **No root at runtime.** gpwebcam runs as the logged-in user. It never loads, unloads or reloads v4l2loopback, because other programs such as OBS may use it.
 - **No shell.** ffmpeg is started with `os/exec` and an argument list.
-- **ffmpeg listens only on the host's address on the GoPro interface**, never on `0.0.0.0`.
+- **gpwebcam receives the stream only on the host's address on the GoPro interface**, never on `0.0.0.0`, and only from the camera's address. ffmpeg reads it from a pipe and opens no socket.
 - **Every input is validated**: resolution and field of view are enums, ports and device numbers are range-checked, interface names are checked before they reach a sysfs path.
 - **Every HTTP request to the camera has a timeout.** On exit gpwebcam stops the camera's stream and ffmpeg.
 - **The network interface is never guessed**: it is found by USB vendor ID in sysfs.

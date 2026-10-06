@@ -17,8 +17,10 @@ func TestRetryStatus(t *testing.T) {
 		noVideo int
 		want    string
 	}{
-		{stream.ErrNoVideo, 1, placeholder.Retrying(m)},
-		{stream.ErrNoVideo, noVideoHint, placeholder.NoVideo},
+		{stream.ErrNoPackets, 1, placeholder.Retrying(m)},
+		{stream.ErrNoPackets, noVideoHint, placeholder.NoVideo},
+		// Datagrams arrive but nothing decodes: not a firewall.
+		{fmt.Errorf("%w: 900 datagrams arrived", stream.ErrNoVideo), noVideoHint, placeholder.Retrying(m)},
 		{fmt.Errorf("start: %w", camera.ErrNoAnswer), 0, placeholder.NotAnswering},
 		{fmt.Errorf("start: %w", camera.ErrCannotCapture), 0, placeholder.CannotCapture},
 		{errors.New("something else"), 0, placeholder.Problem},
