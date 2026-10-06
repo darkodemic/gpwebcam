@@ -48,6 +48,7 @@ Odlučeno 2026-10-06 (Darko): `fyne.io/systray`.
 Dopunjeno 2026-10-06 (Darko): gpwebcam koristi fork [darkodemic/systray](https://github.com/darkodemic/systray) preko `replace` u `go.mod`. Razvoj biblioteke se nastavlja u forku; izmene korisne i drugima idu i kao PR u `fyne-io/systray`. Razlog je pun nadzor nad bibliotekom, pa radio stavke (§9) ne čekaju upstream izdanje.
 
 - Grana u forku nosi ime po izmeni, ne po gpwebcam-u (Darko, 2026-10-06): radio stavke su na `radio-menu-items`, a sledeće izmene na granama kao `feat/<izmena>`.
+- `master` forka je naša linija (Darko, 2026-10-06): izmene se spajaju u njega, a `replace` pokazuje na commit sa njega. Grana za PR u `fyne-io/systray` pravi se od njihovog `master`-a, da ne nosi naše ostale izmene. `radio-menu-items` je fast-forward-ovana u `master` forka (`9c45f67`). U lokalnom klonu `~/Projects/systray` je `origin` fork, a `upstream` `fyne-io/systray`.
 - `replace` umesto preimenovanja modula u `github.com/darkodemic/systray`: importi ostaju `fyne.io/systray`, a povratak na upstream je brisanje jednog reda.
 - Posledice: `go install …@latest` ne radi kad `go.mod` ima `replace` (README ga ne nudi); Debian arhiva (`packaging-and-release.md` §4, korak 4) ne prihvata zavisnost iz forka, pa pre ITP-a treba ili upstream izdanje ili preimenovan modul sa tagovima; Dependabot za `fyne.io/systray` samo javlja upstream izdanja, a fork se ažurira ručno.
 
