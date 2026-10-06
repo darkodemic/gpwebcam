@@ -14,7 +14,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 | Path | What it holds |
 |---|---|
-| `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
+| `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, camera on demand (`demand.go`), restart through systemd's D-Bus API (`systemd.go`), and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
 | `internal/settings` | The settings that the tray menu and `gpwebcam config` change, with their checks, saved as JSON in `~/.config/gpwebcam/settings.json`. |
 | `internal/tray` | The tray icon and its menu through `fyne.io/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
@@ -23,7 +23,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/feed` | Keeps the loopback device supplied: live frames, or the placeholder between them. |
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
-| `internal/v4l2` | Opens the v4l2loopback device, sets its format and finds it by label. |
+| `internal/v4l2` | Opens the v4l2loopback device, sets its format, finds it by label, and follows v4l2loopback's client usage event, which says whether an application streams from the device. |
 | `packaging/` | Files the packages install: systemd user unit, module configuration, man page, Debian copyright, post-install message. |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
 | `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results, written in Serbian. |

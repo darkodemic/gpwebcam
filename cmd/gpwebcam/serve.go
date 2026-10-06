@@ -96,6 +96,12 @@ type server struct {
 
 	trayMu sync.Mutex
 	tray   *tray.Tray // nil while the icon is off
+
+	// usageOK is set while v4l2loopback reports applications streaming
+	// from the device, and used while one does (camera mode demand).
+	usageOK, used atomic.Bool
+	// wake tells idle to look at wantCamera again.
+	wake chan struct{}
 }
 
 // hwaccel picks the stream.Config HWAccel value for the next session.
@@ -208,6 +214,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		f: f, log: log, live: lv, notify: notifier, feed: feed.New(out, idleInterval), once: once,
 		res: res, width: w, height: h,
 		render: render, pictures: map[string]*placeholder.Picture{}, reported: map[string]bool{},
+		wake: make(chan struct{}, 1),
 	}
 	if set.HWDec == "auto" {
 		s.hwaccel(ctx) // probe now, so the first session starts sooner
@@ -219,6 +226,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 			"An application has the camera open. Close it, then run: systemctl --user restart gpwebcam")
 	}
 	if !once {
+		s.watchUsage(ctx, device)
 		lv.changed = s.settingsChanged
 		go lv.watch(ctx)
 		// fyne.io/systray reports through the standard logger.
@@ -229,7 +237,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		defer s.stopTray()
 	}
-	for _, st := range []string{placeholder.NotConnected, placeholder.NoVideo, placeholder.NotAnswering, placeholder.Problem, placeholder.CannotCapture} {
+	for _, st := range []string{placeholder.NotConnected, placeholder.NoVideo, placeholder.NotAnswering, placeholder.Problem, placeholder.CannotCapture, placeholder.Paused} {
 		s.picture(ctx, st, false)
 	}
 
@@ -240,12 +248,41 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	}
 	s.show(ctx, placeholder.NotConnected)
 	noVideo := 0
+	present := false // a camera is connected, as far as notifications go
+	lastName := ""
+	unplugged := func(iface usbnet.Interface) {
+		log.Info("camera unplugged", "iface", iface.Name)
+		noVideo, present = 0, false
+		s.show(ctx, placeholder.NotConnected)
+		s.note(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
+	}
 	for {
 		iface, err := s.waitForCamera(ctx)
 		if err != nil {
 			return interrupted(ctx, err, log)
 		}
-		s.reportModel(iface)
+		if !present || iface.Name != lastName {
+			log.Info("found camera", "iface", iface.Name, "product", iface.Product)
+			lastName = iface.Name
+		}
+		if !present {
+			present = true
+			s.reportModel(iface)
+			s.noteConnected(iface)
+		}
+		if !s.wantCamera() {
+			err := s.idle(ctx, iface)
+			switch {
+			case ctx.Err() != nil:
+				log.Info("stopped on signal")
+				return nil
+			case errors.Is(err, errRenamed):
+				log.Info("network interface renamed", "old", iface.Name)
+			case errors.Is(err, errUnplugged):
+				unplugged(iface)
+			}
+			continue
+		}
 		s.showMoving(ctx, placeholder.WaitingNetwork(modelName(iface)))
 		var hw string
 		hw, err = s.session(ctx, iface)
@@ -259,11 +296,16 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		case errors.Is(err, errReconfigured):
 			log.Info("settings changed, starting the camera again")
 			continue
-		case errors.Is(err, errUnplugged):
-			log.Info("camera unplugged", "iface", iface.Name)
+		case errors.Is(err, errIdle):
+			log.Info("camera stopped: no application uses it")
 			noVideo = 0
-			s.show(ctx, placeholder.NotConnected)
-			s.note(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
+			continue
+		case errors.Is(err, errOff):
+			log.Info("camera stopped: the camera mode is off")
+			noVideo = 0
+			continue
+		case errors.Is(err, errUnplugged):
+			unplugged(iface)
 			continue
 		}
 		log.Warn("session ended", "iface", iface.Name, "err", err)
@@ -281,7 +323,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 			s.mu.Unlock()
 		}
 		if _, lerr := net.InterfaceByName(iface.Name); lerr != nil {
-			s.show(ctx, placeholder.NotConnected)
+			unplugged(iface)
 			continue
 		}
 		// Still connected: the camera refused or stalled. Say why on the
@@ -369,7 +411,6 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 		}
 		iface, err := findIface(s.f.iface)
 		if err == nil {
-			s.log.Info("found camera", "iface", iface.Name, "product", iface.Product)
 			return iface, nil
 		}
 		if !shown {
@@ -407,23 +448,44 @@ func (s *server) picture(ctx context.Context, status string, animate bool) *plac
 	return p
 }
 
-// show switches the device to a still placeholder with the given status.
-func (s *server) show(ctx context.Context, status string) { s.showPicture(ctx, status, false) }
+// show switches the device to a still placeholder with the given status:
+// "not connected", or else a problem.
+func (s *server) show(ctx context.Context, status string) {
+	st := tray.Trouble
+	if status == placeholder.NotConnected {
+		st = tray.Off
+	}
+	s.showPicture(ctx, status, false, st, status)
+}
 
 // showMoving shows a status that waits for something, with moving dots.
-func (s *server) showMoving(ctx context.Context, status string) { s.showPicture(ctx, status, true) }
+func (s *server) showMoving(ctx context.Context, status string) {
+	s.showPicture(ctx, status, true, tray.Off, status)
+}
 
-func (s *server) showPicture(ctx context.Context, status string, animate bool) {
+// showCalm shows a still status that is not a problem, and trayStatus in
+// the tray.
+func (s *server) showCalm(ctx context.Context, status, trayStatus string) {
+	s.showPicture(ctx, status, false, tray.Off, trayStatus)
+}
+
+func (s *server) showPicture(ctx context.Context, status string, animate bool, st tray.State, trayStatus string) {
 	if err := s.feed.Idle(s.picture(ctx, status, animate)); err != nil {
 		s.log.Warn("write placeholder", "err", err)
 	}
-	// Moving statuses wait for something; still ones other than "not
-	// connected" are problems.
-	st := tray.Off
-	if !animate && status != placeholder.NotConnected {
-		st = tray.Trouble
+	s.setStatus(st, trayStatus)
+}
+
+// noteConnected tells that a camera was plugged in and what happens next.
+func (s *server) noteConnected(iface usbnet.Interface) {
+	body := "Starting the webcam."
+	switch {
+	case s.live.Get().Camera == settings.CameraOff:
+		body = "The camera is off in gpwebcam. Turn it on from the menu."
+	case !s.wantCamera():
+		body = "It starts when an application uses the camera."
 	}
-	s.setStatus(st, status)
+	s.note(notify.Low, modelName(iface)+" connected", body)
 }
 
 // testedModels are the cameras gpwebcam has been tested with, by USB
@@ -479,6 +541,9 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) (hw str
 		s.cancelSession = nil
 		s.mu.Unlock()
 	}()
+	if !s.once {
+		go s.watchDemand(ctx, cancel)
+	}
 	fov := s.live.Get().FOV
 	hw = s.hwaccel(ctx)
 	return hw, s.stream(ctx, cancel, parent, iface, fov, hw)
@@ -590,8 +655,6 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 			gotVideo.Store(true)
 			log.Info("video is flowing")
 			s.setStatus(tray.Live, fmt.Sprintf("%s: %sp, %s", modelName(iface), s.res, fov))
-			s.note(notify.Low, modelName(iface)+" connected",
-				fmt.Sprintf("Streaming %sp with the %s field of view.", s.res, fov))
 		})
 		return s.feed.Live(frame)
 	})
@@ -600,7 +663,7 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 
 // ended picks the error a session reports: nil after a signal, errUnplugged
 // or errRenamed after the interface disappeared, errReconfigured after a
-// settings change, otherwise err.
+// settings change, errIdle when the camera should stop, otherwise err.
 func ended(ctx context.Context, err error) error {
 	if ctx.Err() == nil {
 		return err
@@ -612,6 +675,10 @@ func ended(ctx context.Context, err error) error {
 		return errRenamed
 	case errors.Is(cause, errReconfigured):
 		return errReconfigured
+	case errors.Is(cause, errIdle):
+		return errIdle
+	case errors.Is(cause, errOff):
+		return errOff
 	}
 	return nil
 }

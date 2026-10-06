@@ -74,4 +74,23 @@ Darko, 2026-10-06:
 ## 6. Gde smo i šta sledi
 
 - 2026-10-06: Darkovo pitanje, provere iz §2 i ovaj predlog. Ikonica promenjena (§4). Darkove odluke iz §5.
-- Sledeće: implementacija; merenje da li se HERO13 bez `keep_alive`-a sam gasi (§3.3).
+- 2026-10-06, kamera na Darkovoj mašini: setting 59 (auto power down) = 4, što je po Open GoPro specifikaciji 5 minuta. Zato servis i između korišćenja šalje `keep_alive` (§3.3); da li bi se kamera bez njega zaista ugasila na USB-u, nije mereno.
+- 2026-10-06, napisano (testovi prolaze sa `-race`, i na Go 1.22), bez §3.4:
+  - `v4l2.WatchUsage`: drugi deskriptor uređaja samo za događaje, pretplata sa `V4L2_EVENT_SUB_FL_SEND_INITIAL` (bez te zastavice početno stanje ne stiže), `select` na izuzetnom uslovu i `VIDIOC_DQEVENT`. Veličine struktura i brojevi ioctl-ova provereni C programom protiv `linux/videodev2.h` (136 i 32 bajta, `0x80885659`, `0x4020565a`). Uživo na `/dev/video42`: početno "ne koristi" odmah, "koristi" 1.05 s posle pokretanja ffmpeg čitača, "ne koristi" kad je završio posle 2 s.
+  - Postavka i flag `camera` (`demand`, `always`, `off`); meni Camera i "Restart gpwebcam" (`GetUnitByPID` pa `Unit.Restart` preko `godbus`-a, samo uz `INVOCATION_ID`).
+  - Servis: dok kamera ne treba da radi, zamenska slika "<model> ready" ili "Camera off…", uz `keep_alive`; sesija se završava 15 s posle poslednje aplikacije (`errIdle`), a promena režima odmah. Notifikacija "connected" sada stiže pri priključenju, sa rečenicom o tome šta sledi, umesto pri svakom početku videa.
+  - `doctor` proverava da li modul javlja upotrebu.
+- 2026-10-06, proba uživo (build iz radnog stabla umesto servisa, ffmpeg čitač umesto Zoom-a, 720p):
+
+  | Korak | Rezultat |
+  |---|---|
+  | servis krene, niko ne koristi uređaj | kamera ostaje u statusu 0 (off) |
+  | čitač pokrene video | webcam start posle 2.4 s, video posle 4.0 s; čitač prve 4 s dobija zamensku sliku (YAVG oko 45), zatim frejmove kamere (YAVG 8 do 10) |
+  | čitač završi | kamera stane posle 16.3 s (zadrška 15 s plus provera na 0.5 s) |
+  | `camera always` | video posle 3.5 s |
+  | `camera off` | kamera stane odmah |
+  | `camera demand` | kamera ostaje off |
+
+- Ispravke posle probe: nepoznat ključ u `settings.json` više ne obara ceo fajl, nego se prijavi kao upozorenje (`UnknownKeysError`), a `Save` ga zadrži; inače bi stariji build fajl sa ključem `camera` odbacio i vratio podrazumevane vrednosti (tako bi se ponašao build `dbde29f` instaliran 2026-10-06). Režim off ima svoj razlog prekida (`errOff`) i poruku u logu; "found camera" se upisuje samo pri priključenju i preimenovanju interfejsa.
+- Usput 2026-10-06: lokalne provere "na Go 1.22" kroz `mise exec go@1.22` u ovoj sesiji nisu bile na 1.22, jer je shell izvozio `GOROOT` za 1.27.1, pa je Go prešao na 1.27.1. Prava provera: `mise exec go@1.22 -- env -u GOROOT -u GOBIN GOTOOLCHAIN=local GOWORK=off go test ./...`. CI koristi pravi Go 1.22 i bio je zelen.
+- Sledeće: commit, pa proba sa Zoom-om i restart iz menija sa paketom; zatim §3.4 (rezolucija bez restarta).

@@ -104,6 +104,7 @@ type startFlags struct {
 	notify      bool
 	hwdec       string
 	tray        bool
+	camera      string
 	ffmpeg      string
 	dhcpWait    time.Duration
 	connectWait time.Duration
@@ -115,7 +116,7 @@ type startFlags struct {
 
 // settings returns the flag values of the settings.
 func (f startFlags) settings() settings.Settings {
-	return settings.Settings{Res: f.res, FOV: f.fov, HWDec: f.hwdec, Notify: f.notify, Tray: f.tray}
+	return settings.Settings{Camera: f.camera, Res: f.res, FOV: f.fov, HWDec: f.hwdec, Notify: f.notify, Tray: f.tray}
 }
 
 func parseStart(name string, args []string) (startFlags, error) {
@@ -136,6 +137,7 @@ func parseStart(name string, args []string) (startFlags, error) {
 	fs.StringVar(&f.hwdec, "hwdec", d.HWDec, "hardware decoding: auto (GPU when usable, else software) or none (overrides the settings file)")
 	if name == "run" {
 		fs.BoolVar(&f.tray, "tray", d.Tray, "show the tray icon (overrides the settings file)")
+		fs.StringVar(&f.camera, "camera", d.Camera, "when the camera streams: demand (while an application uses it), always or off (overrides the settings file)")
 	}
 	fs.StringVar(&f.ffmpeg, "ffmpeg", "ffmpeg", "ffmpeg executable")
 	fs.DurationVar(&f.dhcpWait, "dhcp-wait", 30*time.Second, "how long to wait for an IPv4 address on the interface")
@@ -158,6 +160,12 @@ func parseStart(name string, args []string) (startFlags, error) {
 	if f.iface != "" {
 		if err := usbnet.ValidateName(f.iface); err != nil {
 			return f, err
+		}
+	}
+	if name == "run" {
+		probe := settings.Defaults()
+		if err := probe.Set("camera", f.camera); err != nil {
+			return f, fmt.Errorf("-%w", err)
 		}
 	}
 	if f.hwdec != "auto" && f.hwdec != "none" {

@@ -72,7 +72,12 @@ func newLive(path string, f startFlags, log *slog.Logger) *live {
 	}
 	l.stamp, _ = stampOf(path)
 	s, err := settings.Load(path)
-	if err != nil {
+	var uk *settings.UnknownKeysError
+	switch {
+	case errors.As(err, &uk):
+		l.lastErr = err.Error()
+		log.Warn("settings file has settings this gpwebcam does not know; ignoring them", "err", err)
+	case err != nil:
 		l.lastErr = err.Error()
 		log.Warn("settings file not used, using the defaults", "err", err)
 	}
@@ -147,6 +152,17 @@ func (l *live) reload() {
 	old := l.effective()
 	s, err := settings.Load(l.path)
 	l.stamp = stamp
+	var uk *settings.UnknownKeysError
+	if errors.As(err, &uk) {
+		// Use what is known; say once which keys are not.
+		if msg := err.Error(); msg != l.lastErr {
+			l.lastErr = msg
+			l.log.Warn("settings file has settings this gpwebcam does not know; ignoring them", "err", err)
+		}
+		err = nil
+	} else if err == nil {
+		l.lastErr = ""
+	}
 	if err != nil {
 		// Keep the settings in use; say so once per distinct problem.
 		msg := err.Error()
@@ -158,7 +174,6 @@ func (l *live) reload() {
 		}
 		return
 	}
-	l.lastErr = ""
 	l.file = s
 	cur := l.effective()
 	l.mu.Unlock()

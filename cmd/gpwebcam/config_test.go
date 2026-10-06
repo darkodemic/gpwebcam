@@ -20,7 +20,7 @@ func TestConfig(t *testing.T) {
 	if err := cmdConfig(nil, &out); err != nil {
 		t.Fatal(err)
 	}
-	want := "# " + path + "\nres=1080\nfov=linear\nhwdec=auto\nnotify=on\ntray=on\n"
+	want := "# " + path + "\ncamera=demand\nres=1080\nfov=linear\nhwdec=auto\nnotify=on\ntray=on\n"
 	if out.String() != want {
 		t.Errorf("defaults:\n%s\nwant:\n%s", out.String(), want)
 	}

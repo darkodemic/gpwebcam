@@ -238,6 +238,17 @@ func checkLoopback(r *report, f doctorFlags) {
 		return
 	}
 	r.ok("%s %q is a v4l2loopback device this user can write to", path, info.Card)
+	u, err := v4l2.WatchUsage(path)
+	switch {
+	case errors.Is(err, v4l2.ErrNoUsageEvents):
+		r.warn("this v4l2loopback does not report when applications use the camera, so camera mode demand works like always",
+			"Newer v4l2loopback versions report it; 0.15.4 does.")
+	case err != nil:
+		r.warn(fmt.Sprintf("cannot watch %s for applications using it: %v", path, err))
+	default:
+		u.Close()
+		r.ok("the module reports when applications use the camera, so camera mode demand works")
+	}
 }
 
 type loopDev struct{ path, name string }
@@ -451,7 +462,10 @@ func checkSettings(r *report) settings.Settings {
 		return settings.Defaults()
 	}
 	s, err := settings.Load(path)
+	var uk *settings.UnknownKeysError
 	switch {
+	case errors.As(err, &uk):
+		r.warn(err.Error(), "A typo, or settings of another gpwebcam version; the known ones apply.")
 	case err != nil:
 		r.warn(err.Error(), "gpwebcam uses the defaults until the file is fixed or deleted.")
 	case !fileExists(path):

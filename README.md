@@ -94,10 +94,10 @@ It checks ffmpeg, the module and the device, the service, the settings, the came
 ## Use
 
 - In your video application, choose the camera named **GoPro**.
-- When the camera connects, the picture switches from the placeholder to the camera, usually within about 3 seconds.
+- By default the GoPro works like any webcam: it starts streaming when an application turns its video on, and stops 15 seconds after the last application turned it off, so it does not heat up while nobody uses it. Starting takes about 5 seconds; the application shows "Starting GoPro HERO13 Black" meanwhile. To stream whenever the camera is connected, or never, change the [camera mode](#settings).
 - When you unplug it, the "Camera not connected" picture comes back. Plug it in again at any time; the application does not need a restart.
 - While there is no video, the picture says why, and names the camera model: it is not connected, was found and waits for its network, is starting, does not answer, or sends no video. Dots after the text keep moving while gpwebcam waits for something, so you can tell it has not frozen.
-- A desktop notification tells you when the camera connects, disconnects or has a problem, for example "GoPro HERO13 Black connected". It needs `notify-send` (package `libnotify`, or `libnotify-bin` on Debian and Ubuntu); turn it off in the tray menu or with `gpwebcam config notify off`.
+- A desktop notification tells you when the camera connects, disconnects or has a problem, for example "GoPro HERO13 Black connected. It starts when an application uses the camera." It needs `notify-send` (package `libnotify`, or `libnotify-bin` on Debian and Ubuntu); turn it off in the tray menu or with `gpwebcam config notify off`.
 - Decoding runs on the GPU through VAAPI (AMD and Intel graphics) when ffmpeg can open a VAAPI device, and on the CPU otherwise. On an AMD GPU this took a third less CPU time with no noticeable added delay. If GPU decoding gives no picture twice in a row, gpwebcam switches to the CPU by itself. On a laptop where it would wake the discrete GPU, turn off **Hardware decoding** in the tray menu or run `gpwebcam config hwdec none`.
 
 ### Tray icon
@@ -105,9 +105,11 @@ It checks ffmpeg, the module and the device, the service, the settings, the came
 While the service runs, a camera icon in the system tray shows the state: white while video flows, orange when the camera has a problem, and faded while there is no video for another reason, such as no camera connected or the camera starting. Its menu has:
 
 - the camera's state, for example "GoPro HERO13 Black: 1080p, linear";
+- **Camera**: On demand (the default; streams while an application uses the camera), Always on (streams while it is connected) or Off (never streams; the picture says so).
 - **Field of view**: Wide, Narrow, SuperView or Linear. The camera restarts with the new one, which takes about 4 seconds; applications keep the camera open meanwhile.
 - **Resolution**: 1080p or 720p. Applications keep the frame size they opened the camera with, so a new resolution applies when gpwebcam restarts: run `systemctl --user restart gpwebcam`, then reopen the camera in the application.
 - **Hardware decoding** and **Notifications**, on or off.
+- **Restart gpwebcam**, when it runs as the systemd service.
 - **Hide icon**. Bring it back with `gpwebcam config tray on`.
 
 The icon needs a desktop with a system tray that speaks StatusNotifierItem: KDE Plasma, Waybar, Quickshell and similar bars show it, and GNOME shows it only with the AppIndicator extension (Ubuntu has it on by default). Without a tray, use `gpwebcam config`.
@@ -123,6 +125,7 @@ gpwebcam config fov wide   # change one
 
 | Setting | Default | Values |
 |---|---|---|
+| `camera` | `demand` | `demand` (stream while an application uses the camera), `always` (while it is connected), `off` |
 | `res` | `1080` | `1080`, `720` |
 | `fov` | `linear` | `wide`, `narrow`, `superview`, `linear` |
 | `hwdec` | `auto` | `auto`, `none` |
@@ -169,7 +172,7 @@ The empty `ExecStart=` clears the packaged command before setting the new one. S
 
 ### Options
 
-`gpwebcam run` and `gpwebcam start` take the same options, except `-tray`, which only `run` has. `-res`, `-fov`, `-hwdec`, `-notify` and `-tray` override the [settings](#settings) file; without them the file applies.
+`gpwebcam run` and `gpwebcam start` take the same options, except `-camera` and `-tray`, which only `run` has; `start` always streams. `-camera`, `-res`, `-fov`, `-hwdec`, `-notify` and `-tray` override the [settings](#settings) file; without them the file applies.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -182,6 +185,7 @@ The empty `ExecStart=` clears the packaged command before setting the new one. S
 | `-hwdec` | `auto` | Hardware decoding: `auto` uses VAAPI when it works, `none` always decodes on the CPU. |
 | `-notify` | `true` | Desktop notifications; `-notify=false` turns them off. |
 | `-tray` | `true` | Tray icon; `-tray=false` turns it off. |
+| `-camera` | `demand` | When the camera streams: `demand`, `always` or `off`. |
 | `-ffmpeg` | `ffmpeg` | ffmpeg executable. |
 | `-dhcp-wait` | `30s` | How long to wait for the camera to give the computer an address. |
 | `-connect-wait` | `20s` | How long to wait for the camera to answer. |
@@ -228,6 +232,7 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 | `the camera reports streaming, but no video arrived` | gpwebcam retries by itself. If it keeps happening, a firewall or VPN is dropping the video: allow incoming UDP port 8554 on the GoPro connection. |
 | An application does not list the camera | The service was not running when the application started. Start the service, then restart the application once. |
 | `an application keeps the device at its size` | gpwebcam started while an application had the camera open, so the device kept its old size and a new resolution could not apply. gpwebcam goes on at the old size. Close the camera in every application, then run `systemctl --user restart gpwebcam`. |
+| The camera does not start when an application opens it | With camera mode `demand`, gpwebcam starts the camera when the application turns its video on, not when it lists cameras; give it about 5 seconds. `gpwebcam doctor` says whether your v4l2loopback reports applications at all; if not, the camera streams whenever it is connected. Mode `off` never starts it. |
 | No tray icon | The desktop has no system tray (GNOME needs the AppIndicator extension), or the icon was hidden: `gpwebcam config tray on`. `gpwebcam doctor` checks both. |
 | `settings file not used` or `settings file changed but cannot be used` | The settings file has an unknown setting or value; the log says which. gpwebcam keeps the defaults or the last good settings. Fix it with `gpwebcam config`, or delete the file. |
 | An application reports the camera as busy | Another application has the camera open. Like any V4L2 camera, it can be used by one application at a time; close it in the other application first. |

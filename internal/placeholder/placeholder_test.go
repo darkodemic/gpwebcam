@@ -11,7 +11,7 @@ import (
 
 func statuses() []string {
 	m := "GoPro HERO13 Black"
-	return []string{NotConnected, NoVideo, NotAnswering, Problem, CannotCapture, WaitingNetwork(m), Starting(m), Retrying(m)}
+	return []string{NotConnected, NoVideo, NotAnswering, Problem, CannotCapture, Paused, Ready(m), WaitingNetwork(m), Starting(m), Retrying(m)}
 }
 
 func TestValidText(t *testing.T) {

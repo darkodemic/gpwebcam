@@ -94,3 +94,24 @@ func TestAccepted(t *testing.T) {
 		}
 	}
 }
+
+func TestEventLayout(t *testing.T) {
+	// Values from linux/videodev2.h, printed by a C program 2026-10-06.
+	if s := unsafe.Sizeof(event{}); s != 136 {
+		t.Errorf("sizeof(event) = %d, want 136", s)
+	}
+	if o := unsafe.Offsetof(event{}.Pending); o != 72 {
+		t.Errorf("offsetof(event.Pending) = %d, want 72", o)
+	}
+	if s := unsafe.Sizeof(eventSubscription{}); s != 32 {
+		t.Errorf("sizeof(eventSubscription) = %d, want 32", s)
+	}
+	if vidiocSubscribeEvent != 0x4020565a || vidiocDQEvent != 0x80885659 {
+		t.Errorf("ioctl numbers %#x %#x, want 0x4020565a 0x80885659", vidiocSubscribeEvent, vidiocDQEvent)
+	}
+	var ev event
+	ev.U[0] = 1
+	if clientCount(ev) != 1 {
+		t.Error("client count not read from the start of the payload")
+	}
+}

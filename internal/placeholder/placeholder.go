@@ -29,7 +29,12 @@ const (
 	Problem      = "Camera problem, retrying. See the gpwebcam log."
 	// CannotCapture follows camera.ErrCannotCapture.
 	CannotCapture = "Camera cannot start. Is its battery in and charged?"
+	// Paused is shown while the camera mode is off.
+	Paused = "Camera off. Turn it on from the gpwebcam menu."
 )
+
+// Ready is shown while the camera waits for an application to use it.
+func Ready(model string) string { return model + " ready" }
 
 // WaitingNetwork, Starting and Retrying name the camera; they are shown
 // with moving dots.

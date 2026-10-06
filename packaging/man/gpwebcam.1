@@ -32,8 +32,12 @@ label is fixed when the module is loaded.
 .PP
 .B gpwebcam run
 shows an icon in the desktop's system tray (StatusNotifierItem). Its menu
-shows the camera's state and changes the settings: field of view,
-resolution, hardware decoding and notifications.
+shows the camera's state and changes the settings: camera mode, field of
+view, resolution, hardware decoding and notifications.
+.PP
+By default the camera streams on demand: gpwebcam starts it when an
+application turns on the video of the device, and stops it 15 seconds
+after the last one turned it off. v4l2loopback reports this to gpwebcam.
 .SH COMMANDS
 .TP
 .B run
@@ -51,6 +55,8 @@ Stream one camera session and exit when it ends.
 .BR config " [\fIsetting\fR [\fIvalue\fR]]"
 Without arguments, print every setting; with a setting, print its value;
 with a value too, change it. The settings are
+.B camera
+(demand, always, off),
 .B res
 (1080, 720),
 .B fov
@@ -78,14 +84,16 @@ Print the version.
 and
 .B start
 take these options, except
+.B \-camera
+and
 .BR \-tray ,
 which only
 .B run
 has;
 .B doctor
 takes -ffmpeg, -iface, -video-nr, -device-label, -port and -http-timeout.
--res, -fov, -hwdec, -notify and -tray override the settings file; without
-them the file applies.
+-camera, -res, -fov, -hwdec, -notify and -tray override the settings file;
+without them the file applies.
 .TP
 .BI \-res " 1080|720"
 Resolution of the stream. Default 1080.
@@ -120,6 +128,12 @@ Show desktop notifications through notify-send. Default true.
 .TP
 .BI \-tray= bool
 Show the tray icon. Default true.
+.TP
+.BI \-camera " demand|always|off"
+When the camera streams: while an application uses the device, whenever it
+is connected, or never. Only for
+.BR run ;
+default demand.
 .TP
 .BI \-dhcp\-wait " duration"
 How long to wait for the camera to give the computer an IPv4 address.

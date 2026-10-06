@@ -27,13 +27,23 @@ type View struct {
 	// ResPending is set when the saved resolution differs from the one in
 	// use; it changes only when gpwebcam restarts.
 	ResPending bool
+	// CanRestart shows the restart item; gpwebcam runs under systemd.
+	CanRestart bool
+}
+
+// Actions are called from the tray's goroutine when the user picks an item.
+type Actions struct {
+	// Set changes a setting to a value.
+	Set func(key, value string)
+	// Restart restarts gpwebcam.
+	Restart func()
 }
 
 // Tray is the icon and its menu. fyne.io/systray keeps global state, so a
 // process has at most one.
 type Tray struct {
 	log *slog.Logger
-	set func(key, value string)
+	act Actions
 
 	mu     sync.Mutex
 	latest View
@@ -43,11 +53,10 @@ type Tray struct {
 	once   sync.Once
 }
 
-// Start shows the icon. set is called, from the tray's goroutine, with a
-// setting and its new value when the user picks a menu item.
-func Start(log *slog.Logger, first View, set func(key, value string)) *Tray {
+// Start shows the icon.
+func Start(log *slog.Logger, first View, act Actions) *Tray {
 	t := &Tray{
-		log: log, set: set, latest: first,
+		log: log, act: act, latest: first,
 		kick: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}),
 	}
 	go t.run()
@@ -76,7 +85,7 @@ func (t *Tray) Stop() {
 }
 
 // click is a menu item's setting and the value picking it sets; an empty
-// value flips an on/off setting.
+// value flips an on/off setting. The key "restart" restarts gpwebcam.
 type click struct{ key, value string }
 
 // toggle returns the opposite of an on/off setting.
@@ -99,6 +108,8 @@ func toggle(key string, s settings.Settings) string {
 // items are the menu entries that change with the view.
 type items struct {
 	status     *systray.MenuItem
+	camera     *systray.MenuItem
+	cameras    map[string]*systray.MenuItem
 	fov        *systray.MenuItem
 	fovs       map[camera.FOV]*systray.MenuItem
 	res        *systray.MenuItem
@@ -106,10 +117,15 @@ type items struct {
 	resPending *systray.MenuItem
 	hwdec      *systray.MenuItem
 	notify     *systray.MenuItem
+	restart    *systray.MenuItem
 	hide       *systray.MenuItem
 }
 
 var (
+	cameraOrder  = []string{settings.CameraDemand, settings.CameraAlways, settings.CameraOff}
+	cameraLabels = map[string]string{
+		settings.CameraDemand: "On demand", settings.CameraAlways: "Always on", settings.CameraOff: "Off",
+	}
 	fovOrder   = []camera.FOV{camera.FOVWide, camera.FOVNarrow, camera.FOVSuperView, camera.FOVLinear}
 	fovLabels  = map[camera.FOV]string{camera.FOVWide: "Wide", camera.FOVNarrow: "Narrow", camera.FOVSuperView: "SuperView", camera.FOVLinear: "Linear"}
 	resOrder   = []camera.Resolution{camera.Res1080, camera.Res720}
@@ -152,6 +168,12 @@ func (t *Tray) run() {
 	it.status = systray.AddMenuItem("", "")
 	it.status.Disable()
 	systray.AddSeparator()
+	it.camera = systray.AddMenuItem("Camera", "When the GoPro streams")
+	it.cameras = map[string]*systray.MenuItem{}
+	for _, m := range cameraOrder {
+		it.cameras[m] = it.camera.AddSubMenuItemCheckbox(cameraLabels[m], "", false)
+		forward(it.cameras[m], func() click { return click{"camera", m} })
+	}
 	it.fov = systray.AddMenuItem("Field of view", "")
 	it.fovs = map[camera.FOV]*systray.MenuItem{}
 	for _, f := range fovOrder {
@@ -171,6 +193,8 @@ func (t *Tray) run() {
 	it.notify = systray.AddMenuItemCheckbox("Notifications", "", false)
 	forward(it.notify, func() click { return click{key: "notify"} })
 	systray.AddSeparator()
+	it.restart = systray.AddMenuItem("Restart gpwebcam", "")
+	forward(it.restart, func() click { return click{key: "restart"} })
 	it.hide = systray.AddMenuItem("Hide icon", "Bring it back with: gpwebcam config tray on")
 	forward(it.hide, func() click { return click{"tray", "off"} })
 
@@ -188,10 +212,14 @@ func (t *Tray) run() {
 		select {
 		case <-t.kick:
 		case c := <-clicks:
+			if c.key == "restart" {
+				t.act.Restart()
+				continue
+			}
 			if c.value == "" {
 				c.value = toggle(c.key, v.Settings)
 			}
-			t.set(c.key, c.value)
+			t.act.Set(c.key, c.value)
 		case <-t.stop:
 			return
 		}
@@ -207,6 +235,10 @@ func (it *items) show(v View) {
 	it.status.SetTitle(status)
 	systray.SetTooltip("gpwebcam: " + status)
 
+	for m, item := range it.cameras {
+		check(item, v.Settings.Camera == m)
+	}
+	lock(it.camera, "Camera", v.Locked["camera"])
 	for f, item := range it.fovs {
 		check(item, v.Settings.FOV == f)
 	}
@@ -224,6 +256,11 @@ func (it *items) show(v View) {
 	lock(it.hwdec, "Hardware decoding", v.Locked["hwdec"])
 	check(it.notify, v.Settings.Notify)
 	lock(it.notify, "Notifications", v.Locked["notify"])
+	if v.CanRestart {
+		it.restart.Show()
+	} else {
+		it.restart.Hide()
+	}
 	lock(it.hide, "Hide icon", v.Locked["tray"])
 }
 

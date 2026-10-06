@@ -4,7 +4,6 @@
 package settings
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -20,6 +20,9 @@ import (
 
 // Settings are the user's choices. Flags of the same name override them.
 type Settings struct {
+	// Camera says when the camera streams: "demand" while an application
+	// uses the device, "always" while it is connected, "off" never.
+	Camera string            `json:"camera"`
 	Res    camera.Resolution `json:"res"`
 	FOV    camera.FOV        `json:"fov"`
 	HWDec  string            `json:"hwdec"`
@@ -29,7 +32,14 @@ type Settings struct {
 
 // Keys are the setting names, in the order "gpwebcam config" prints them.
 // Each is also the name of the flag that overrides it.
-var Keys = []string{"res", "fov", "hwdec", "notify", "tray"}
+var Keys = []string{"camera", "res", "fov", "hwdec", "notify", "tray"}
+
+// Camera modes.
+const (
+	CameraDemand = "demand"
+	CameraAlways = "always"
+	CameraOff    = "off"
+)
 
 // FileName is the name of the settings file in the configuration directory.
 const FileName = "settings.json"
@@ -39,13 +49,13 @@ const maxFile = 64 << 10
 
 // Defaults are the settings without a file.
 func Defaults() Settings {
-	return Settings{Res: camera.Res1080, FOV: camera.FOVLinear, HWDec: "auto", Notify: true, Tray: true}
+	return Settings{Camera: CameraDemand, Res: camera.Res1080, FOV: camera.FOVLinear, HWDec: "auto", Notify: true, Tray: true}
 }
 
 // Validate reports the first value that is not allowed. JSON decoding does
 // not go through camera's flag.Value checks, so Load calls this.
 func (s Settings) Validate() error {
-	for _, k := range []string{"res", "fov", "hwdec"} {
+	for _, k := range []string{"camera", "res", "fov", "hwdec"} {
 		var probe Settings
 		if err := probe.Set(k, s.Get(k)); err != nil {
 			return err
@@ -57,6 +67,8 @@ func (s Settings) Validate() error {
 // Get returns one setting as text.
 func (s Settings) Get(key string) string {
 	switch key {
+	case "camera":
+		return s.Camera
 	case "res":
 		return string(s.Res)
 	case "fov":
@@ -74,6 +86,12 @@ func (s Settings) Get(key string) string {
 // Set parses and checks one setting given as text.
 func (s *Settings) Set(key, value string) error {
 	switch key {
+	case "camera":
+		if value != CameraDemand && value != CameraAlways && value != CameraOff {
+			return fmt.Errorf("camera %q: must be demand, always or off", value)
+		}
+		s.Camera = value
+		return nil
 	case "res":
 		return s.Res.Set(value)
 	case "fov":
@@ -144,43 +162,111 @@ func Path() (string, error) {
 	return filepath.Join(d, FileName), nil
 }
 
-// Load reads the settings file. A missing file gives the defaults, and so
-// does a missing key, so a file can hold only what the user changed.
-func Load(path string) (Settings, error) {
-	s := Defaults()
+// UnknownKeysError names keys of the settings file that this gpwebcam does
+// not know: a typo, or a setting of another version. Load returns it
+// together with the settings it knows, and Save keeps such keys, so an
+// older and a newer gpwebcam can share the file.
+type UnknownKeysError struct {
+	Path string
+	Keys []string
+}
+
+func (e *UnknownKeysError) Error() string {
+	return fmt.Sprintf("%s: unknown settings ignored: %s", e.Path, strings.Join(e.Keys, ", "))
+}
+
+func known(key string) bool {
+	for _, k := range Keys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// readFile returns the file's content, or nil when there is no file.
+func readFile(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return s, nil
+		return nil, nil
 	}
 	if err != nil {
-		return s, err
+		return nil, err
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, maxFile+1))
 	if err != nil {
-		return Defaults(), err
+		return nil, err
 	}
 	if len(data) > maxFile {
-		return Defaults(), fmt.Errorf("%s: larger than %d bytes", path, maxFile)
+		return nil, fmt.Errorf("%s: larger than %d bytes", path, maxFile)
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&s); err != nil {
+	return data, nil
+}
+
+// Load reads the settings file. A missing file gives the defaults, and so
+// does a missing key, so a file can hold only what the user changed. A file
+// that is not JSON or has a bad value gives the defaults and an error;
+// unknown keys give the known settings and an *UnknownKeysError.
+func Load(path string) (Settings, error) {
+	data, err := readFile(path)
+	if err != nil || data == nil {
+		return Defaults(), err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return Defaults(), fmt.Errorf("%s: %w", path, err)
+	}
+	s := Defaults()
+	if err := json.Unmarshal(data, &s); err != nil {
 		return Defaults(), fmt.Errorf("%s: %w", path, err)
 	}
 	if err := s.Validate(); err != nil {
 		return Defaults(), fmt.Errorf("%s: %w", path, err)
+	}
+	var unknown []string
+	for k := range raw {
+		if !known(k) {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return s, &UnknownKeysError{Path: path, Keys: unknown}
 	}
 	return s, nil
 }
 
 // Save writes the settings file through a temporary file and a rename, so
-// a reader never sees half a file.
+// a reader never sees half a file. Keys of the old file that this gpwebcam
+// does not know stay.
 func Save(path string, s Settings) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(s, "", "  ")
+	merged := map[string]json.RawMessage{}
+	if old, err := readFile(path); err == nil && old != nil {
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(old, &raw) == nil {
+			for k, v := range raw {
+				if !known(k) {
+					merged[k] = v
+				}
+			}
+		}
+	}
+	ours, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(ours, &fields); err != nil {
+		return err
+	}
+	for k, v := range fields {
+		merged[k] = v
+	}
+	data, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return err
 	}

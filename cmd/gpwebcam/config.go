@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/darkodemic/gpwebcam/internal/settings"
 )
@@ -16,6 +18,7 @@ within a few seconds; a new resolution applies when it restarts. A flag
 given to "gpwebcam run" overrides the file.
 
 settings:
+  camera  demand (while an application uses it), always or off
   res     1080 or 720
   fov     wide, narrow, superview or linear
   hwdec   auto or none
@@ -34,7 +37,11 @@ func cmdConfig(args []string, stdout io.Writer) error {
 		return err
 	}
 	s, err := settings.Load(path)
-	if err != nil {
+	var uk *settings.UnknownKeysError
+	switch {
+	case errors.As(err, &uk):
+		fmt.Fprintln(os.Stderr, "gpwebcam:", err)
+	case err != nil:
 		// Do not replace a file the user may want to fix by hand.
 		return fmt.Errorf("%w; fix or delete the file", err)
 	}

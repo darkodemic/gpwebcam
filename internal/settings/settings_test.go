@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 
 func TestSaveLoad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", FileName)
-	want := Settings{Res: camera.Res720, FOV: camera.FOVWide, HWDec: "none", Notify: false, Tray: false}
+	want := Settings{Camera: CameraOff, Res: camera.Res720, FOV: camera.FOVWide, HWDec: "none", Notify: false, Tray: false}
 	if err := Save(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +64,10 @@ func TestLoadPartialFileKeepsDefaults(t *testing.T) {
 
 func TestLoadRejects(t *testing.T) {
 	for _, tc := range []struct{ name, data, want string }{
-		{"unknown key", `{"fps": 60}`, "unknown field"},
 		{"bad fov", `{"fov": "fisheye"}`, "fov"},
 		{"bad res", `{"res": "4k"}`, "resolution"},
 		{"bad hwdec", `{"hwdec": "cuda"}`, "hwdec"},
+		{"bad camera", `{"camera": "sometimes"}`, "camera"},
 		{"wrong type", `{"tray": "yes"}`, "tray"},
 		{"not json", `res=720`, "invalid character"},
 	} {
@@ -83,6 +84,33 @@ func TestLoadRejects(t *testing.T) {
 				t.Errorf("a bad file gave %+v, want defaults", s)
 			}
 		})
+	}
+}
+
+func TestUnknownKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	if err := os.WriteFile(path, []byte(`{"fov": "wide", "fps": 60, "zoom": "x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	var uk *UnknownKeysError
+	if !errors.As(err, &uk) || strings.Join(uk.Keys, ",") != "fps,zoom" {
+		t.Fatalf("err = %v, want unknown fps and zoom", err)
+	}
+	if s.FOV != camera.FOVWide {
+		t.Errorf("known setting not loaded next to unknown ones: %+v", s)
+	}
+
+	// Saving keeps them, for the version that knows them.
+	s.Tray = false
+	if err := Save(path, s); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	for _, want := range []string{`"fps": 60`, `"zoom": "x"`, `"tray": false`, `"fov": "wide"`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("saved file lacks %s:\n%s", want, data)
+		}
 	}
 }
 
@@ -111,6 +139,8 @@ func TestSaveRejectsInvalid(t *testing.T) {
 func TestSetGet(t *testing.T) {
 	s := Defaults()
 	for _, tc := range []struct{ key, in, out string }{
+		{"camera", "always", "always"},
+		{"camera", "off", "off"},
 		{"res", "720", "720"},
 		{"fov", "superview", "superview"},
 		{"hwdec", "none", "none"},
@@ -128,7 +158,7 @@ func TestSetGet(t *testing.T) {
 		}
 	}
 	for _, tc := range []struct{ key, in string }{
-		{"res", "4k"}, {"fov", ""}, {"hwdec", "cuda"}, {"notify", "maybe"}, {"fps", "60"},
+		{"camera", "on"}, {"res", "4k"}, {"fov", ""}, {"hwdec", "cuda"}, {"notify", "maybe"}, {"fps", "60"},
 	} {
 		before := s
 		if err := s.Set(tc.key, tc.in); err == nil {
