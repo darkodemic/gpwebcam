@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/darkodemic/gpwebcam/internal/camera"
+	"github.com/darkodemic/gpwebcam/internal/settings"
 	"github.com/darkodemic/gpwebcam/internal/stream"
 	"github.com/darkodemic/gpwebcam/internal/usbnet"
 	"github.com/darkodemic/gpwebcam/internal/v4l2"
@@ -28,6 +29,7 @@ commands:
   run       keep the loopback device fed: camera video whenever a GoPro
             is connected, a placeholder picture otherwise (service mode)
   start     stream one camera session, then exit
+  config    show or change the settings, as the tray menu does
   doctor    check the setup and say what to fix
   list      list GoPro network interfaces
   version   print the version
@@ -55,6 +57,8 @@ func run(args []string, stdout io.Writer, log *slog.Logger) error {
 		return cmdServe(args[1:], log, false)
 	case "start":
 		return cmdServe(args[1:], log, true)
+	case "config":
+		return cmdConfig(args[1:], stdout)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout)
 	case "list":
@@ -99,18 +103,28 @@ type startFlags struct {
 	label       string
 	notify      bool
 	hwdec       string
+	tray        bool
 	ffmpeg      string
 	dhcpWait    time.Duration
 	connectWait time.Duration
 	httpTimeout time.Duration
+	// set are the flags given on the command line. Of the settings, only
+	// these override the settings file.
+	set map[string]bool
+}
+
+// settings returns the flag values of the settings.
+func (f startFlags) settings() settings.Settings {
+	return settings.Settings{Res: f.res, FOV: f.fov, HWDec: f.hwdec, Notify: f.notify, Tray: f.tray}
 }
 
 func parseStart(name string, args []string) (startFlags, error) {
-	f := startFlags{res: camera.Res1080, fov: camera.FOVLinear, port: 8554}
+	d := settings.Defaults()
+	f := startFlags{res: d.Res, fov: d.FOV, port: 8554}
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.StringVar(&f.iface, "iface", "", "GoPro network interface (default: the only one found in sysfs)")
-	fs.Var(&f.res, "res", "resolution: 1080 or 720")
-	fs.Var(&f.fov, "fov", "field of view: wide, narrow, superview or linear")
+	fs.Var(&f.res, "res", "resolution: 1080 or 720 (overrides the settings file)")
+	fs.Var(&f.fov, "fov", "field of view: wide, narrow, superview or linear (overrides the settings file)")
 	fs.Func("port", "UDP port the camera streams to, 1024-65535 (default 8554)", func(s string) error {
 		p, err := stream.Port(s)
 		f.port = p
@@ -118,8 +132,11 @@ func parseStart(name string, args []string) (startFlags, error) {
 	})
 	fs.IntVar(&f.videoNr, "video-nr", -1, "v4l2loopback device number, /dev/videoN; -1 finds the device by -device-label")
 	fs.StringVar(&f.label, "device-label", v4l2.DefaultLabel, "card_label of the v4l2loopback device to use")
-	fs.BoolVar(&f.notify, "notify", true, "show desktop notifications through notify-send")
-	fs.StringVar(&f.hwdec, "hwdec", "auto", "hardware decoding: auto (GPU when usable, else software) or none")
+	fs.BoolVar(&f.notify, "notify", d.Notify, "show desktop notifications through notify-send (overrides the settings file)")
+	fs.StringVar(&f.hwdec, "hwdec", d.HWDec, "hardware decoding: auto (GPU when usable, else software) or none (overrides the settings file)")
+	if name == "run" {
+		fs.BoolVar(&f.tray, "tray", d.Tray, "show the tray icon (overrides the settings file)")
+	}
 	fs.StringVar(&f.ffmpeg, "ffmpeg", "ffmpeg", "ffmpeg executable")
 	fs.DurationVar(&f.dhcpWait, "dhcp-wait", 30*time.Second, "how long to wait for an IPv4 address on the interface")
 	fs.DurationVar(&f.connectWait, "connect-wait", 20*time.Second, "how long to wait for the camera's HTTP server to answer")
@@ -130,6 +147,14 @@ func parseStart(name string, args []string) (startFlags, error) {
 	if fs.NArg() > 0 {
 		return f, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
+	f.set = map[string]bool{}
+	fs.Visit(func(fl *flag.Flag) {
+		for _, k := range settings.Keys {
+			if fl.Name == k {
+				f.set[k] = true
+			}
+		}
+	})
 	if f.iface != "" {
 		if err := usbnet.ValidateName(f.iface); err != nil {
 			return f, err

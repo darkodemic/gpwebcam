@@ -15,9 +15,12 @@ Type=exec
 ExecStart=/usr/bin/gpwebcam run
 Restart=on-failure
 RestartSec=10s
+# ~/.config/gpwebcam, where the tray menu saves the settings. systemd
+# creates it and keeps it writable despite ProtectHome=read-only.
+ConfigurationDirectory=gpwebcam
 
-# gpwebcam needs the loopback device, IPv4 to the camera and netlink to
-# read interfaces; nothing else.
+# gpwebcam needs the loopback device, IPv4 to the camera, netlink to read
+# interfaces and the session D-Bus (AF_UNIX) for the tray; nothing else.
 NoNewPrivileges=yes
 LockPersonality=yes
 RestrictRealtime=yes

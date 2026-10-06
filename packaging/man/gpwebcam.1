@@ -1,4 +1,4 @@
-.TH GPWEBCAM 1 "2026-10-05" "gpwebcam" "User Commands"
+.TH GPWEBCAM 1 "2026-10-06" "gpwebcam" "User Commands"
 .SH NAME
 gpwebcam \- use a GoPro connected over USB as a Linux webcam
 .SH SYNOPSIS
@@ -7,6 +7,9 @@ gpwebcam \- use a GoPro connected over USB as a Linux webcam
 .br
 .B gpwebcam start
 .RI [ options ]
+.br
+.B gpwebcam config
+.RI [ setting " [" value ]]
 .br
 .B gpwebcam doctor
 .RI [ options ]
@@ -26,20 +29,43 @@ While no camera sends video, gpwebcam writes a placeholder picture that
 says why and names the camera model, so applications keep listing the
 camera. Applications see the device by its label, GoPro by default; the
 label is fixed when the module is loaded.
+.PP
+.B gpwebcam run
+shows an icon in the desktop's system tray (StatusNotifierItem). Its menu
+shows the camera's state and changes the settings: field of view,
+resolution, hardware decoding and notifications.
 .SH COMMANDS
 .TP
 .B run
 Keep running: wait for a camera, stream it while it is connected, and show
-the placeholder while it is not. This is what the systemd user service
+the placeholder while it is not, with the tray icon. This is what the
+systemd user service
 .B gpwebcam.service
-runs.
+runs. It applies a changed setting within about 2 seconds: a new field of
+view or decoder restarts the camera; a new resolution applies when
+gpwebcam restarts, because applications keep the frame size they opened.
 .TP
 .B start
 Stream one camera session and exit when it ends.
 .TP
+.BR config " [\fIsetting\fR [\fIvalue\fR]]"
+Without arguments, print every setting; with a setting, print its value;
+with a value too, change it. The settings are
+.B res
+(1080, 720),
+.B fov
+(wide, narrow, superview, linear),
+.B hwdec
+(auto, none),
+.B notify
+(on, off) and
+.B tray
+(on, off). The tray menu changes the same file.
+.TP
 .B doctor
-Check ffmpeg, the v4l2loopback module and device, the service, the camera's
-connection and the firewall, and print what to fix. Reads the camera's
+Check ffmpeg, the v4l2loopback module and device, the service, the
+settings, the camera's connection, the firewall and the system tray, and
+print what to fix. Reads the camera's
 state but changes nothing. Exits with status 1 if a check fails.
 .TP
 .B list
@@ -51,9 +77,15 @@ Print the version.
 .B run
 and
 .B start
-take these options;
+take these options, except
+.BR \-tray ,
+which only
+.B run
+has;
 .B doctor
 takes -ffmpeg, -iface, -video-nr, -device-label, -port and -http-timeout.
+-res, -fov, -hwdec, -notify and -tray override the settings file; without
+them the file applies.
 .TP
 .BI \-res " 1080|720"
 Resolution of the stream. Default 1080.
@@ -86,6 +118,9 @@ on the CPU. Default auto.
 .BI \-notify= bool
 Show desktop notifications through notify-send. Default true.
 .TP
+.BI \-tray= bool
+Show the tray icon. Default true.
+.TP
 .BI \-dhcp\-wait " duration"
 How long to wait for the camera to give the computer an IPv4 address.
 Default 30s.
@@ -107,12 +142,26 @@ OBS Virtual Camera. A file with the same name in /etc/modprobe.d replaces it.
 .TP
 .I /usr/lib/modules-load.d/gpwebcam.conf
 Loads v4l2loopback at boot.
+.TP
+.I ~/.config/gpwebcam/settings.json
+The settings, written by the tray menu and
+.BR "gpwebcam config" ;
+.I $XDG_CONFIG_HOME/gpwebcam
+when XDG_CONFIG_HOME is set.
 .SH EXIT STATUS
 0 on success or when stopped by SIGINT or SIGTERM, 1 on an error or when a
 .B doctor
 check fails.
 .SH EXAMPLES
-Change resolution and field of view for the service:
+Change the field of view; the running service applies it:
+.PP
+.RS
+.nf
+gpwebcam config fov wide
+.fi
+.RE
+.PP
+Give the service an option that is not a setting:
 .PP
 .RS
 .nf
@@ -126,7 +175,7 @@ and set
 .nf
 [Service]
 ExecStart=
-ExecStart=/usr/bin/gpwebcam run \-res 720 \-fov wide
+ExecStart=/usr/bin/gpwebcam run \-port 8555
 .fi
 .RE
 .PP

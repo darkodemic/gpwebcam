@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	stdlog "log"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -19,7 +20,9 @@ import (
 	"github.com/darkodemic/gpwebcam/internal/feed"
 	"github.com/darkodemic/gpwebcam/internal/notify"
 	"github.com/darkodemic/gpwebcam/internal/placeholder"
+	"github.com/darkodemic/gpwebcam/internal/settings"
 	"github.com/darkodemic/gpwebcam/internal/stream"
+	"github.com/darkodemic/gpwebcam/internal/tray"
 	"github.com/darkodemic/gpwebcam/internal/usbnet"
 	"github.com/darkodemic/gpwebcam/internal/v4l2"
 )
@@ -53,6 +56,8 @@ var (
 	// udev renames the kernel's "eth0" to a predictable name about 0.5 s
 	// after the camera appears, and a session may have started in between.
 	errRenamed = errors.New("network interface was renamed")
+	// errReconfigured: a setting the running session uses was changed.
+	errReconfigured = errors.New("settings changed")
 )
 
 // noVideoHint is how many sessions in a row must end without video before
@@ -64,8 +69,13 @@ const noVideoHint = 3
 type server struct {
 	f      startFlags
 	log    *slog.Logger
-	notify *notify.Notifier // nil when disabled or notify-send is missing
+	live   *live
+	notify *notify.Notifier // nil when notify-send is missing
 	feed   *feed.Feed
+	once   bool // gpwebcam start: one session, no tray
+	// res is the resolution of the device; a new one applies only when
+	// gpwebcam restarts, because applications keep the size they opened.
+	res    camera.Resolution
 	width  int
 	height int
 
@@ -74,14 +84,54 @@ type server struct {
 	mu       sync.Mutex
 	pictures map[string]*placeholder.Picture // by status line
 	reported map[string]bool                 // untested models already reported
+	// The VAAPI probe runs once, when hwdec is first auto. gpuFailed is
+	// set after GPU decoding gave no video twice, until hwdec is turned
+	// off and on again.
+	gpuProbed, gpuOK, gpuFailed bool
+	// cancelSession ends the running session, if there is one.
+	cancelSession context.CancelCauseFunc
+	// trayState and trayStatus are what the tray shows about the camera.
+	trayState  tray.State
+	trayStatus string
 
-	// gpu is "vaapi" when -hwdec auto found a working VAAPI device at
-	// start; it becomes "none" after GPU decoding gave no video twice.
-	gpu string
+	trayMu sync.Mutex
+	tray   *tray.Tray // nil while the icon is off
 }
 
-// hwdec returns the stream.Config HWAccel value for the next session.
-func (s *server) hwdec() string { return s.gpu }
+// hwaccel picks the stream.Config HWAccel value for the next session.
+func (s *server) hwaccel(ctx context.Context) string {
+	if s.live.Get().HWDec != "auto" {
+		return "none"
+	}
+	s.mu.Lock()
+	probed := s.gpuProbed
+	s.mu.Unlock()
+	if !probed {
+		err := stream.ProbeVAAPI(ctx, s.f.ffmpeg)
+		if ctx.Err() != nil {
+			return "none" // cancelled: the probe says nothing about the GPU
+		}
+		if err != nil {
+			s.log.Info("hardware decoding is not available, decoding in software", "err", err)
+		}
+		s.mu.Lock()
+		s.gpuProbed, s.gpuOK = true, err == nil
+		s.mu.Unlock()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.gpuOK && !s.gpuFailed {
+		return "vaapi"
+	}
+	return "none"
+}
+
+// note sends a desktop notification when the notify setting is on.
+func (s *server) note(urgency, summary, body string) {
+	if s.live.Get().Notify {
+		s.notify.Send(urgency, summary, body)
+	}
+}
 
 // cmdServe implements both "run" (once false: wait for cameras forever) and
 // "start" (once true: one session, then exit).
@@ -111,14 +161,19 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		stop()
 	}()
 
-	var notifier *notify.Notifier
-	if f.notify {
-		notifier = notify.New()
+	path, err := settings.Path()
+	if err != nil {
+		log.Warn("no settings file, using flags and defaults", "err", err)
 	}
+	lv := newLive(path, f, log)
+	set := lv.Get()
+	notifier := notify.New()
 	device, err := findDevice(f)
 	if err != nil && !once {
-		notifier.Send(notify.Normal, "gpwebcam is waiting for its video device",
-			"Load the v4l2loopback module or reboot. See: journalctl --user -u gpwebcam")
+		if set.Notify {
+			notifier.Send(notify.Normal, "gpwebcam is waiting for its video device",
+				"Load the v4l2loopback module or reboot. See: journalctl --user -u gpwebcam")
+		}
 		// At boot the user service may start before the module is loaded,
 		// or the module may be installed later: wait instead of exiting
 		// into a restart loop.
@@ -129,38 +184,46 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		return interrupted(ctx, err, log)
 	}
 
-	w, h := f.res.Size()
+	set = lv.Get() // the file may have changed while waiting
+	w, h := set.Res.Size()
 	out, err := v4l2.OpenOutput(device, w, h)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	gpu := "none"
-	if f.hwdec == "auto" {
-		if err := stream.ProbeVAAPI(ctx, f.ffmpeg); err == nil {
-			gpu = "vaapi"
-		} else {
-			log.Info("hardware decoding is not available, decoding in software", "err", err)
-		}
-	}
 	render, err := placeholder.NewRenderer(ctx, f.ffmpeg, w, h)
 	if err != nil {
 		log.Warn("render placeholder, using a plain frame", "err", err)
 	}
 	s := &server{
-		f: f, log: log, notify: notifier, feed: feed.New(out, idleInterval), width: w, height: h,
+		f: f, log: log, live: lv, notify: notifier, feed: feed.New(out, idleInterval), once: once,
+		res: set.Res, width: w, height: h,
 		render: render, pictures: map[string]*placeholder.Picture{}, reported: map[string]bool{},
-		gpu: gpu,
+	}
+	if set.HWDec == "auto" {
+		s.hwaccel(ctx) // probe now, so the first session starts sooner
 	}
 	go s.feed.Run(ctx)
 	log.Info("feeding loopback device", "device", device, "size", fmt.Sprintf("%dx%d", w, h))
+	if !once {
+		lv.changed = s.settingsChanged
+		go lv.watch(ctx)
+		// fyne.io/systray reports through the standard logger.
+		stdlog.SetFlags(0)
+		stdlog.SetOutput(newLineLogger(log, "systray"))
+		if set.Tray {
+			s.startTray()
+		}
+		defer s.stopTray()
+	}
 	for _, st := range []string{placeholder.NotConnected, placeholder.NoVideo, placeholder.NotAnswering, placeholder.Problem} {
 		s.picture(ctx, st, false)
 	}
 
 	if once {
 		s.showMoving(ctx, placeholder.WaitingNetwork(modelName(iface)))
-		return interrupted(ctx, s.session(ctx, iface), log)
+		_, err := s.session(ctx, iface)
+		return interrupted(ctx, err, log)
 	}
 	s.show(ctx, placeholder.NotConnected)
 	noVideo := 0
@@ -171,7 +234,8 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		s.reportModel(iface)
 		s.showMoving(ctx, placeholder.WaitingNetwork(modelName(iface)))
-		err = s.session(ctx, iface)
+		var hw string
+		hw, err = s.session(ctx, iface)
 		switch {
 		case ctx.Err() != nil:
 			log.Info("stopped on signal")
@@ -179,11 +243,14 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		case errors.Is(err, errRenamed):
 			log.Info("network interface renamed, starting again", "old", iface.Name)
 			continue
+		case errors.Is(err, errReconfigured):
+			log.Info("settings changed, starting the camera again")
+			continue
 		case errors.Is(err, errUnplugged):
 			log.Info("camera unplugged", "iface", iface.Name)
 			noVideo = 0
 			s.show(ctx, placeholder.NotConnected)
-			s.notify.Send(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
+			s.note(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
 			continue
 		}
 		log.Warn("session ended", "iface", iface.Name, "err", err)
@@ -192,11 +259,13 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		} else {
 			noVideo = 0
 		}
-		if noVideo >= 2 && s.gpu != "none" {
+		if noVideo >= 2 && hw == "vaapi" {
 			// A GPU decoder that initialises but yields nothing would
 			// otherwise fail every session; software decoding always works.
 			log.Warn("no video twice with hardware decoding, using software decoding from now on")
-			s.gpu = "none"
+			s.mu.Lock()
+			s.gpuFailed = true
+			s.mu.Unlock()
 		}
 		if _, lerr := net.InterfaceByName(iface.Name); lerr != nil {
 			s.show(ctx, placeholder.NotConnected)
@@ -213,12 +282,12 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		switch status {
 		case placeholder.NoVideo:
-			s.notify.Send(notify.Normal, model+" sends no video",
+			s.note(notify.Normal, model+" sends no video",
 				fmt.Sprintf("Is a firewall blocking UDP port %d? See: journalctl --user -u gpwebcam", f.port))
 		case placeholder.NotAnswering:
-			s.notify.Send(notify.Normal, model+" does not answer", "Unplug and replug the USB cable.")
+			s.note(notify.Normal, model+" does not answer", "Unplug and replug the USB cable.")
 		case placeholder.Problem:
-			s.notify.Send(notify.Normal, model+" problem", "gpwebcam keeps retrying. See: journalctl --user -u gpwebcam")
+			s.note(notify.Normal, model+" problem", "gpwebcam keeps retrying. See: journalctl --user -u gpwebcam")
 		}
 		if !sleep(ctx, retryDelay) {
 			log.Info("stopped on signal")
@@ -329,6 +398,13 @@ func (s *server) showPicture(ctx context.Context, status string, animate bool) {
 	if err := s.feed.Idle(s.picture(ctx, status, animate)); err != nil {
 		s.log.Warn("write placeholder", "err", err)
 	}
+	// Moving statuses wait for something; still ones other than "not
+	// connected" are problems.
+	st := tray.Off
+	if !animate && status != placeholder.NotConnected {
+		st = tray.Trouble
+	}
+	s.setStatus(st, status)
 }
 
 // testedModels are the cameras gpwebcam has been tested with, by USB
@@ -364,16 +440,35 @@ func (s *server) reportModel(iface usbnet.Interface) {
 	}
 	s.log.Warn("this camera model has not been tested with gpwebcam; please report whether it works",
 		"model", modelName(iface), "tested", "HERO13 Black")
-	s.notify.Send(notify.Normal, modelName(iface)+" has not been tested",
+	s.note(notify.Normal, modelName(iface)+" has not been tested",
 		"gpwebcam will try it. Please report whether it works: https://github.com/darkodemic/gpwebcam/issues")
 }
 
 // session streams one camera into the device until the stream ends, the
-// interface disappears or ctx ends; in the last case it returns nil.
-func (s *server) session(parent context.Context, iface usbnet.Interface) error {
-	f, log := s.f, s.log
+// interface disappears, a setting it uses changes or ctx ends; in the last
+// case it returns nil. It also returns the decoder it used, from hwaccel.
+func (s *server) session(parent context.Context, iface usbnet.Interface) (hw string, err error) {
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
+	// Register before reading the settings, so that a change made from
+	// here on restarts this session.
+	s.mu.Lock()
+	s.cancelSession = cancel
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.cancelSession = nil
+		s.mu.Unlock()
+	}()
+	fov := s.live.Get().FOV
+	hw = s.hwaccel(ctx)
+	return hw, s.stream(ctx, cancel, parent, iface, fov, hw)
+}
+
+// stream does the work of session, whose context and cancel function it
+// gets, with the given field of view and decoder. parent outlives ctx.
+func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, parent context.Context, iface usbnet.Interface, fov camera.FOV, hw string) error {
+	f, log := s.f, s.log
 	go watchIface(ctx, iface, cancel)
 	go func() {
 		// Show the placeholder as soon as the cable is out, not when
@@ -399,8 +494,8 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 
 	cam := camera.NewClient(netip.AddrPortFrom(camAddr, camera.HTTPPort), host.Addr(), f.httpTimeout)
 	err = cam.StartWebcam(ctx, camera.StartOptions{
-		Res:       f.res,
-		FOV:       f.fov,
+		Res:       s.res,
+		FOV:       fov,
 		Port:      f.port,
 		Poll:      500 * time.Millisecond,
 		Connect:   f.connectWait,
@@ -429,7 +524,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 	if err != nil {
 		return ended(ctx, err)
 	}
-	log.Info("webcam started", "res", f.res, "fov", f.fov, "port", f.port, "hwdec", s.hwdec())
+	log.Info("webcam started", "res", s.res, "fov", fov, "port", f.port, "hwdec", hw)
 
 	kctx, cancelKeepAlive := context.WithCancel(ctx)
 	defer cancelKeepAlive()
@@ -449,7 +544,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		log.Info("no video yet, stopping and starting the camera again")
 		err := cam.Stop(ctx)
 		if err == nil {
-			err = cam.Start(ctx, f.res, f.fov, f.port)
+			err = cam.Start(ctx, s.res, fov, f.port)
 		}
 		if err != nil && ctx.Err() == nil {
 			log.Warn("restart camera", "err", err)
@@ -463,7 +558,7 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		Height:      s.height,
 		ReadTimeout: 5 * time.Second,
 		FirstFrame:  firstFrame,
-		HWAccel:     s.hwdec(),
+		HWAccel:     hw,
 	}, newLineLogger(log, "ffmpeg"), 3*time.Second, func(frame []byte) error {
 		if ctx.Err() != nil {
 			return nil // ending: leave the device to the placeholder
@@ -471,8 +566,9 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 		videoFlowing.Do(func() {
 			gotVideo.Store(true)
 			log.Info("video is flowing")
-			s.notify.Send(notify.Low, modelName(iface)+" connected",
-				fmt.Sprintf("Streaming %sp with the %s field of view.", f.res, f.fov))
+			s.setStatus(tray.Live, fmt.Sprintf("%s: %sp, %s", modelName(iface), s.res, fov))
+			s.note(notify.Low, modelName(iface)+" connected",
+				fmt.Sprintf("Streaming %sp with the %s field of view.", s.res, fov))
 		})
 		return s.feed.Live(frame)
 	})
@@ -480,7 +576,8 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) error {
 }
 
 // ended picks the error a session reports: nil after a signal, errUnplugged
-// or errRenamed after the interface disappeared, otherwise err.
+// or errRenamed after the interface disappeared, errReconfigured after a
+// settings change, otherwise err.
 func ended(ctx context.Context, err error) error {
 	if ctx.Err() == nil {
 		return err
@@ -490,6 +587,8 @@ func ended(ctx context.Context, err error) error {
 		return errUnplugged
 	case errors.Is(cause, errRenamed):
 		return errRenamed
+	case errors.Is(cause, errReconfigured):
+		return errReconfigured
 	}
 	return nil
 }

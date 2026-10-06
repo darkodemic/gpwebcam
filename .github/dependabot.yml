@@ -1,9 +1,13 @@
-# Keeps the commit-pinned GitHub Actions current: one pull request a
-# month when a new version of an action is out. gpwebcam has no Go module
-# dependencies to watch.
+# Keeps the commit-pinned GitHub Actions and the Go module dependencies
+# (the tray icon's fyne.io/systray and godbus) current: at most one pull
+# request a month for each.
 version: 2
 updates:
   - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: gomod
     directory: /
     schedule:
       interval: monthly

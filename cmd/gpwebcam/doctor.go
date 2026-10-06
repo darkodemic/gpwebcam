@@ -17,7 +17,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/godbus/dbus/v5"
+
 	"github.com/darkodemic/gpwebcam/internal/camera"
+	"github.com/darkodemic/gpwebcam/internal/settings"
 	"github.com/darkodemic/gpwebcam/internal/stream"
 	"github.com/darkodemic/gpwebcam/internal/usbnet"
 	"github.com/darkodemic/gpwebcam/internal/v4l2"
@@ -98,9 +101,11 @@ func cmdDoctor(args []string, stdout io.Writer) error {
 	checkFFmpeg(r, f.ffmpeg)
 	checkLoopback(r, f)
 	checkService(r)
+	set := checkSettings(r)
 	checkCamera(r, f)
 	checkFirewall(r, f.port)
 	checkNotifications(r)
+	checkTray(r, set)
 
 	fmt.Fprintf(stdout, "\n%d problem(s), %d warning(s).\n", r.fails, r.warns)
 	if r.fails > 0 {
@@ -436,6 +441,56 @@ func checkFirewall(r *report, port uint16) {
 	if !found {
 		r.ok("neither firewalld nor ufw is running (nftables rules need root to check)")
 	}
+}
+
+func checkSettings(r *report) settings.Settings {
+	r.section("settings")
+	path, err := settings.Path()
+	if err != nil {
+		r.warn(err.Error())
+		return settings.Defaults()
+	}
+	s, err := settings.Load(path)
+	switch {
+	case err != nil:
+		r.warn(err.Error(), "gpwebcam uses the defaults until the file is fixed or deleted.")
+	case !fileExists(path):
+		r.ok("no settings file yet, the defaults apply (%s)", path)
+	default:
+		parts := make([]string, len(settings.Keys))
+		for i, k := range settings.Keys {
+			parts[i] = k + "=" + s.Get(k)
+		}
+		r.ok("%s: %s", path, strings.Join(parts, " "))
+	}
+	return s
+}
+
+// checkTray looks for a StatusNotifierItem host: KDE, Quickshell, Waybar
+// and GNOME with the AppIndicator extension register this watcher name.
+func checkTray(r *report, s settings.Settings) {
+	r.section("tray")
+	if !s.Tray {
+		r.ok("the tray icon is off; turn it on with: gpwebcam config tray on")
+		return
+	}
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		r.warn("no session D-Bus; the tray icon will not show",
+			"Run gpwebcam doctor as yourself in your desktop session, not with sudo or in a container.")
+		return
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var has bool
+	err = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.NameHasOwner", 0, "org.kde.StatusNotifierWatcher").Store(&has)
+	if err != nil || !has {
+		r.warn("this desktop shows no system tray, so the icon will not show",
+			"GNOME needs the AppIndicator extension. Without a tray, use: gpwebcam config")
+		return
+	}
+	r.ok("the desktop has a system tray")
 }
 
 func checkNotifications(r *report) {

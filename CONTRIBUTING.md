@@ -4,7 +4,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 ## Tools
 
-- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Only the standard library is used.
+- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Besides the standard library, only the tray icon has dependencies: `fyne.io/systray` and, through it, `github.com/godbus/dbus/v5`. Both are pure Go, so the binary stays static.
 - **ffmpeg**, for the tests that run the real ffmpeg and for running gpwebcam.
 - **GoReleaser**, for building packages, also pinned in `mise.toml`.
 - With [mise](https://mise.jdx.dev), `mise install` in the repository installs both. If your shell does not activate mise, prefix commands with `mise exec --`, e.g. `mise exec -- go test ./...`. CI uses the same `mise.toml`.
@@ -14,7 +14,9 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 | Path | What it holds |
 |---|---|
-| `cmd/gpwebcam` | The command line: `run`, `start`, `doctor`, `list`, `version`; the session loop, the watchdog and the ffmpeg log filter. |
+| `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
+| `internal/settings` | The settings that the tray menu and `gpwebcam config` change, with their checks, saved as JSON in `~/.config/gpwebcam/settings.json`. |
+| `internal/tray` | The tray icon and its menu through `fyne.io/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
 | `internal/stream` | Runs ffmpeg, which decodes the camera's MPEG-TS stream and hands raw frames over a pipe. |
@@ -47,6 +49,8 @@ Only one program can write to the loopback device, so stop the service first:
 systemctl --user stop gpwebcam
 ./gpwebcam run
 ```
+
+The tray icon of a gpwebcam started this way uses the same settings file as the service. To look at the icon's menu without a panel, find gpwebcam's name on the session bus with `busctl --user list | grep gpwebcam`, then call `busctl --user call <name> /StatusNotifierItem/menu com.canonical.dbusmenu GetLayout iias -- 0 -1 0`.
 
 ## Packages
 
@@ -94,7 +98,7 @@ git push origin v0.1.0
 - **Every input is validated**: resolution and field of view are enums, ports and device numbers are range-checked, interface names are checked before they reach a sysfs path.
 - **Every HTTP request to the camera has a timeout.** On exit gpwebcam stops the camera's stream and ffmpeg.
 - **The network interface is never guessed**: it is found by USB vendor ID in sysfs.
-- **Standard library first.** Add a dependency only when it saves real work.
+- **Standard library first.** Add a dependency only when it saves real work, and keep it pure Go so the binary stays static.
 - **Code comments and documentation in the code are in English.**
 
 ## Design notes
