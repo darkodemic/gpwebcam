@@ -171,19 +171,19 @@ func (t *Tray) run() {
 	it.camera = systray.AddMenuItem("Camera", "When the GoPro streams")
 	it.cameras = map[string]*systray.MenuItem{}
 	for _, m := range cameraOrder {
-		it.cameras[m] = it.camera.AddSubMenuItemCheckbox(cameraLabels[m], "", false)
+		it.cameras[m] = it.camera.AddSubMenuItemRadio(cameraLabels[m], "", false)
 		forward(it.cameras[m], func() click { return click{"camera", m} })
 	}
 	it.fov = systray.AddMenuItem("Field of view", "")
 	it.fovs = map[camera.FOV]*systray.MenuItem{}
 	for _, f := range fovOrder {
-		it.fovs[f] = it.fov.AddSubMenuItemCheckbox(fovLabels[f], "", false)
+		it.fovs[f] = it.fov.AddSubMenuItemRadio(fovLabels[f], "", false)
 		forward(it.fovs[f], func() click { return click{"fov", string(f)} })
 	}
 	it.res = systray.AddMenuItem("Resolution", "")
 	it.ress = map[camera.Resolution]*systray.MenuItem{}
 	for _, r := range resOrder {
-		it.ress[r] = it.res.AddSubMenuItemCheckbox(resLabels[r], "", false)
+		it.ress[r] = it.res.AddSubMenuItemRadio(resLabels[r], "", false)
 		forward(it.ress[r], func() click { return click{"res", string(r)} })
 	}
 	it.resPending = it.res.AddSubMenuItem("Applies once no application uses the camera", "")

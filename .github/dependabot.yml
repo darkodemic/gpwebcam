@@ -1,6 +1,8 @@
 # Keeps the commit-pinned GitHub Actions and the Go module dependencies
 # (the tray icon's fyne.io/systray and godbus) current: at most one pull
-# request a month for each.
+# request a month for each. go.mod replaces fyne.io/systray with our fork,
+# so a pull request for it only announces an upstream release; the fork is
+# updated by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions

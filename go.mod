@@ -8,3 +8,5 @@ require (
 )
 
 require golang.org/x/sys v0.15.0 // indirect
+
+replace fyne.io/systray => github.com/darkodemic/systray v1.12.3-0.20261006205618-9c45f672f861

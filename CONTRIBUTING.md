@@ -4,7 +4,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 ## Tools
 
-- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Besides the standard library, only the tray icon has dependencies: `fyne.io/systray` and, through it, `github.com/godbus/dbus/v5`. Both are pure Go, so the binary stays static.
+- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Besides the standard library, only the tray icon has dependencies: `fyne.io/systray` and, through it, `github.com/godbus/dbus/v5`. Both are pure Go, so the binary stays static. `go.mod` replaces `fyne.io/systray` with our fork [darkodemic/systray](https://github.com/darkodemic/systray), which adds radio menu items ([fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135)); imports stay `fyne.io/systray`.
 - **ffmpeg**, for the tests that run the real ffmpeg and for running gpwebcam.
 - **GoReleaser**, for building packages, also pinned in `mise.toml`.
 - With [mise](https://mise.jdx.dev), `mise install` in the repository installs both. If your shell does not activate mise, prefix commands with `mise exec --`, e.g. `mise exec -- go test ./...`. CI uses the same `mise.toml`.

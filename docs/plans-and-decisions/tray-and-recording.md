@@ -1,6 +1,6 @@
 # Tray ikonica i snimanje (0.2.0)
 
-- **Status:** Prihvaćen 2026-10-06: tray preko `fyne.io/systray` u istom procesu kao `gpwebcam run` (§3), preseci redom tray, sopstveni UDP prijem, snimanje (§7). Cilj je izdanje 0.2.0.
+- **Status:** Prihvaćen 2026-10-06: tray preko `fyne.io/systray`, od 2026-10-06 iz forka `darkodemic/systray` (§3.2), u istom procesu kao `gpwebcam run` (§3), preseci redom tray, sopstveni UDP prijem, snimanje (§7). Cilj je izdanje 0.2.0.
 - **Date:** 2026-10-06
 - **Owner:** Darko
 - **Related:** `release-0.1.0.md` §2 (F3), §4; predajna beleška §10.1 (notifikacije), §10.2 (snimanje); `first-slice-gw-start.md` §8 (watchdog za pakete); ADR 0001 (Go kao jezik implementacije); ADR 0003 (gpwebcam drži uređaj kao user servis)
@@ -30,6 +30,8 @@ Van obima za 0.2.0: prozor sa podešavanjima, snimanje na microSD karticu kamere
 | `xdg-user-dir VIDEOS` na Darkovoj mašini vraća `/home/user`, jer XDG folder za video nije podešen | 2026-10-06 |
 | `fyne.io/systray` v1.12.2 traži Go 1.19 i zavisi od `godbus/dbus/v5` i `golang.org/x/sys`; `godbus/dbus/v5` v5.2.2 traži Go 1.20. Oba se slažu sa `go 1.22` u `go.mod` | proxy.golang.org, 2026-10-06 |
 | `fyne.io/systray` v1.12.2: cgo samo u `systray_darwin.go`; Linux deo (`systray_unix.go`) je čist Go preko D-Bus-a. Prati `NameOwnerChanged` za `org.kde.StatusNotifierWatcher` i ponovo se registruje kad se watcher pojavi. Ima `RunWithExternalLoop` za program koji već ima svoju petlju. Stanje drži u globalnoj promenljivoj, a greške piše kroz standardni `log` | izvorni kod v1.12.2 sa proxy.golang.org, 2026-10-06 |
+| `fyne.io/systray` nema radio stavke ni u v1.12.2 ni na `master`-u (`528cad2`): na Linuxu šalje samo dbusmenu `toggle-type` `checkmark`, iako spec ima i `radio`. Nema ni issue-a ni PR-a za to, ni u `fyne-io/systray` ni u `getlantern/systray` | izvorni kod i `gh search`, 2026-10-06 |
+| `fyne-io/systray` je GitHub fork `getlantern/systray`: 186 commit-a ispred, 17 iza. Tih 17 su iz 2021–2023, uglavnom GTK i libayatana-appindicator, koje je fyne namerno izbacio, plus dve Windows ispravke za podmenije. `getlantern/systray` je poslednji put menjan 2024-07-03, `fyne-io/systray` 2026-08 | GitHub compare API, 2026-10-06 |
 
 ## 3. Tray
 
@@ -42,6 +44,12 @@ Alternativa je poseban proces `gpwebcam tray` sa sopstvenim user servisom, koji 
 ### 3.2 Biblioteka
 
 Odlučeno 2026-10-06 (Darko): `fyne.io/systray`.
+
+Dopunjeno 2026-10-06 (Darko): gpwebcam koristi fork [darkodemic/systray](https://github.com/darkodemic/systray) preko `replace` u `go.mod`. Razvoj biblioteke se nastavlja u forku; izmene korisne i drugima idu i kao PR u `fyne-io/systray`. Razlog je pun nadzor nad bibliotekom, pa radio stavke (§9) ne čekaju upstream izdanje.
+
+- Grana u forku nosi ime po izmeni, ne po gpwebcam-u (Darko, 2026-10-06): radio stavke su na `radio-menu-items`, a sledeće izmene na granama kao `feat/<izmena>`.
+- `replace` umesto preimenovanja modula u `github.com/darkodemic/systray`: importi ostaju `fyne.io/systray`, a povratak na upstream je brisanje jednog reda.
+- Posledice: `go install …@latest` ne radi kad `go.mod` ima `replace` (README ga ne nudi); Debian arhiva (`packaging-and-release.md` §4, korak 4) ne prihvata zavisnost iz forka, pa pre ITP-a treba ili upstream izdanje ili preimenovan modul sa tagovima; Dependabot za `fyne.io/systray` samo javlja upstream izdanja, a fork se ažurira ručno.
 
 Go standardna biblioteka nema D-Bus, pa je ovo prva spoljna zavisnost (ADR 0001 kaže "standardna biblioteka prvo", ne "samo").
 
@@ -58,8 +66,8 @@ Samo meni, bez prozora: prozor traži GUI biblioteku, a to je mnogo veća zavisn
 - stanje, neaktivna stavka: na primer "HERO13 Black · 1080p · linear · stream radi"
 - Snimaj / Zaustavi snimanje, sa trajanjem dok snima
 - Otvori folder sa snimcima (`xdg-open`)
-- Vidno polje: wide, narrow, superview, linear
-- Rezolucija: 1080p, 720p
+- Vidno polje: wide, narrow, superview, linear (radio)
+- Rezolucija: 1080p, 720p (radio)
 - Hardversko dekodiranje (čekboks)
 - Notifikacije (čekboks)
 - Sakrij ikonicu
@@ -178,4 +186,9 @@ Uz svaki presek: README, man stranica, `doctor` (tray host, folder za snimke) i 
 - 2026-10-06: commit `301bf30`, CI zelen.
 - 2026-10-06: Darko pitao za restart iz menija i kameru koja radi samo kad je aplikacija traži; predlog je `camera-on-demand.md`. Ikonica promenjena: bela, narandžasta i izbledela bela umesto sive, plave i narandžaste.
 - 2026-10-06: Darko odlučio da rad na zahtev (`camera-on-demand.md`) ide pre preseka 2.
-- Sledeće: rad na zahtev, pa presek 2.
+- 2026-10-06: Darko primetio da kamera, vidno polje i rezolucija u meniju imaju čekbokse iako se bira jedna vrednost, jer biblioteka nema radio stavke (§2). Dogovoreno: dodati ih u `fyne.io/systray` i poslati PR. Urađeno u lokalnom klonu `~/Projects/systray` (od `master`-a `528cad2`), commit `9c45f67` na grani `radio-menu-items` forka `darkodemic/systray`, PR [fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135):
+  - `AddMenuItemRadio` i `AddSubMenuItemRadio`, sa istim `Check`/`Uncheck` kao čekboks; ekskluzivnost grupe drži aplikacija, kao do sada u `show`. Linux i BSD: `toggle-type` `radio`; Windows: `MFT_RADIOCHECK`; macOS bez izmene, jer tamo i izbor jedne vrednosti nosi kvačicu.
+  - Test za `toggle-type` i `toggle-state`, grupa "Size" u primeru, README. Testovi prolaze, Windows build prolazi; primer pokrenut na Quickshell-u vraća `toggle-type` `radio` kroz `GetLayout`. Windows test fajl se na upstream `master`-u ne kompajlira ni bez ove izmene (`systray_windows_test.go:47`, stara signatura).
+  - gpwebcam: tri poziva u `internal/tray/tray.go` prešla na `AddSubMenuItemRadio`.
+- 2026-10-06: Darko odlučio da gpwebcam pređe na fork (§3.2). `go.mod`: `replace fyne.io/systray => github.com/darkodemic/systray v1.12.3-0.20261006205618-9c45f672f861`, commit `9c45f67` sa grane `radio-menu-items`. Provereno bez `go.work`: `gofmt`, `go vet` i `go test -race` prolaze na Go 1.27.1 i 1.22.12; `goreleaser release --snapshot --clean` pravi svih šest paketa; binarni fajl je i dalje statički, a `go version -m` pokazuje fork.
+- Sledeće: rad na zahtev, pa presek 2. PR #135 čeka review u `fyne-io/systray`.
