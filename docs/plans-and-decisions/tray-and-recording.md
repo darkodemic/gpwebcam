@@ -1,6 +1,6 @@
 # Tray icon and recording (0.2.0)
 
-- **Status:** Accepted 2026-10-06: tray through `fyne.io/systray`, since 2026-10-06 from the fork `darkodemic/systray` (§3.2), in the same process as `gpwebcam run` (§3), slices in order: tray, own UDP receiver, recording (§7). The target is release 0.2.0.
+- **Status:** Accepted 2026-10-06: tray through `fyne.io/systray`, since 2026-10-06 from the fork `darkodemic/systray`, since 2026-10-07 as its own module `github.com/darkodemic/systray` v1.13.0 (§3.2, §10), in the same process as `gpwebcam run` (§3), slices in order: tray, own UDP receiver, recording (§7). The target is release 0.2.0.
 - **Date:** 2026-10-06
 - **Owner:** Darko
 - **Related:** `release-0.1.0.md` §2 (F3), §4; handover note §10.1 (notifications), §10.2 (recording); `first-slice-gw-start.md` §8 (packet watchdog); ADR 0001 (Go as the implementation language); ADR 0003 (gpwebcam owns the device as a user service)
@@ -49,8 +49,8 @@ Amended 2026-10-06 (Darko): gpwebcam uses the fork [darkodemic/systray](https://
 
 - A branch in the fork is named after the change, not after gpwebcam (Darko, 2026-10-06): radio items are on `radio-menu-items`, and the next changes go on branches like `feat/<change>`.
 - The fork's `master` is our line (Darko, 2026-10-06): changes are merged into it, and `replace` points to a commit from it. A branch for a PR to `fyne-io/systray` is created from their `master`, so that it does not carry our other changes. `radio-menu-items` was fast-forwarded into the fork's `master` (`9c45f67`). In the local clone `~/Projects/systray`, `origin` is the fork and `upstream` is `fyne-io/systray`.
-- `replace` instead of renaming the module to `github.com/darkodemic/systray`: imports stay `fyne.io/systray`, and going back to upstream means deleting one line.
-- Consequences: `go install …@latest` does not work when `go.mod` has a `replace` (the README does not offer it); the Debian archive (`packaging-and-release.md` §4, step 4) does not accept a dependency from a fork, so before the ITP we need either an upstream release or a renamed module with tags; Dependabot only reports upstream releases of `fyne.io/systray`, and the fork is updated by hand.
+- `replace` instead of renaming the module to `github.com/darkodemic/systray`: imports stay `fyne.io/systray`, and going back to upstream means deleting one line. No longer valid since 2026-10-07: the fork is renamed and released (§10).
+- Consequences: `go install …@latest` does not work when `go.mod` has a `replace` (the README does not offer it); the Debian archive (`packaging-and-release.md` §6, step 4) does not accept a dependency from a fork, so before the ITP we need either an upstream release or a renamed module with tags; Dependabot only reports upstream releases of `fyne.io/systray`, and the fork is updated by hand.
 
 The Go standard library has no D-Bus, so this is the first external dependency (ADR 0001 says "standard library first", not "only").
 
@@ -189,7 +189,7 @@ With every slice: README, man page, `doctor` (tray host, recordings folder), and
 - 2026-10-06: commit `8fb1ca7`, CI green.
 - 2026-10-06: Darko asked about a restart from the menu and a camera that runs only when an application asks for it; the proposal is `camera-on-demand.md`. The icon changed: white, orange and faded white instead of gray, blue and orange.
 - 2026-10-06: Darko decided that camera on demand (`camera-on-demand.md`) goes before slice 2.
-- 2026-10-06: Darko noticed that camera, field of view and resolution in the menu have checkboxes although a single value is chosen, because the library has no radio items (§2). Agreed: add them to `fyne.io/systray` and send a PR. Done in the local clone `~/Projects/systray` (from `master` `528cad2`), commit `9c45f67` on the branch `radio-menu-items` of the fork `darkodemic/systray`, PR [fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135):
+- 2026-10-06: Darko noticed that camera, field of view and resolution in the menu have checkboxes although a single value is chosen, because the library has no radio items (§2). Agreed: add them to `fyne.io/systray` and send a PR. Done in the local clone `~/Projects/systray` (from `master` `528cad2`), commit `9c45f67` on the branch `radio-menu-items` of the fork `darkodemic/systray`, PR [fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135) (closed 2026-10-06, when its branch was deleted; Darko does not reopen it: "ako hoće mogu sami da povuku izmene", "if they want, they can pull the changes themselves"):
   - `AddMenuItemRadio` and `AddSubMenuItemRadio`, with the same `Check`/`Uncheck` as a checkbox; the application keeps the group exclusive, as it already did in `show`. Linux and BSD: `toggle-type` `radio`; Windows: `MFT_RADIOCHECK`; macOS unchanged, because there a single-value choice also carries a check mark.
   - A test for `toggle-type` and `toggle-state`, a "Size" group in the example, README. Tests pass, the Windows build passes; the example run on Quickshell returns `toggle-type` `radio` through `GetLayout`. The Windows test file does not compile on upstream `master` even without this change (`systray_windows_test.go:47`, old signature).
   - gpwebcam: three calls in `internal/tray/tray.go` switched to `AddSubMenuItemRadio`.
@@ -214,4 +214,17 @@ With every slice: README, man page, `doctor` (tray host, recordings folder), and
   - The size in the notification: "8 MB" for a file that Nautilus shows as 9.2 MB. The bytes were correct (`bytes=9165466` in the log, the same as `ls`), but they were shown as MiB (`>>20`), without decimals. Now `record.SizeText` computes in decimal units with one decimal place, like Nautilus and Dolphin, in the notification, in `gpwebcam record stop` and in the free-space messages; the threshold is exactly 1 GB.
   - The first recording fell on a session in which the camera reported a stream, but only 49 datagrams arrived, without a single frame, so a 52 kB file without a picture was left behind. The recorder now starts with the first decoded frame, not at the start of the session, so a session without video leaves no file.
 - 2026-10-07: Darko proposed "Quit gpwebcam" at the bottom of the menu and a launcher in the applications menu, so the service can be brought back without a terminal; both were agreed. Quit stops the service through systemd (`GetUnitByPID`, then `Unit.Stop`), so systemd does not start it again; without systemd it just ends the process cleanly. The notification is sent synchronously (`notify.SendNow`), before the process goes away. Launcher: `packaging/desktop/gpwebcam.desktop` in `/usr/share/applications`, "GoPro Webcam", the icon `camera-web` from the theme until Darko makes his own; it runs `gpwebcam launch`, which starts the service through `Manager.StartUnit`, waits for it to become active and reports the outcome with a notification, because there is no terminal when started from the menu. `desktop-file-validate` reports nothing; `gpwebcam launch` while the service runs says "already running".
-- Next: test the package (Quit, GoPro Webcam from the menu), commit slice 3, then release 0.2.0.
+- 2026-10-07: slice 3 committed together with Quit and the launcher (`ccabf7f`), CI green. The plans were translated into English, personal details of the test machine were removed from the whole history, and the rewritten history went to a new public repository `darkodemic/gpwebcam`; the old one stays private as `darkodemic/gpwebcam-private-archive`. `v0.1.0` published.
+- 2026-10-07: gpwebcam moves to `github.com/darkodemic/systray` v1.13.0 (§10).
+- Next: release 0.2.0.
+
+## 10. Amendments
+
+### 2026-10-07: the systray fork as its own module
+
+The fork is renamed from `fyne.io/systray` to `github.com/darkodemic/systray` (fork PR #4, decision in the fork's `docs/plans-and-decisions/0001-module-path.md`) and has its first release, v1.13.0, a signed annotated tag. It works the same as `9c45f67`, which gpwebcam used through `replace`, except that godbus is raised to v5.2.2.
+
+- `go.mod`: `require github.com/darkodemic/systray v1.13.0` and `github.com/godbus/dbus/v5 v5.2.2`, indirect `golang.org/x/sys v0.27.0`, `go 1.22`, no `replace`. The import in `internal/tray/tray.go` is `github.com/darkodemic/systray`; the package is still called `systray`.
+- §3.2, "`replace` instead of renaming the module", no longer applies.
+- Consequences: `go install …@latest` is no longer blocked by `replace`. Dependabot now opens pull requests for new releases of the fork, so updating it by hand is no longer needed. For a Debian ITP (`packaging-and-release.md` §6, step 4) there is now a renamed module with tags, but it would have to exist as a Debian package of its own, like any Go dependency; `fyne.io/systray` is not in Debian either. godbus is in Debian as `golang-dbus` 5.1.0 (bookworm, trixie, forky and sid, checked 2026-10-07 on sources.debian.org), so either gpwebcam builds with 5.1.0 there or `golang-dbus` needs an update.
+- Upstream PR fyne-io/systray#135 (radio items) was closed 2026-10-06, when its branch was deleted. Darko does not reopen it.

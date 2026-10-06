@@ -1,5 +1,6 @@
 // Package tray shows gpwebcam's icon and menu in the desktop's system tray
-// through the StatusNotifierItem D-Bus interface (fyne.io/systray), which
+// through the StatusNotifierItem D-Bus interface (github.com/darkodemic/systray,
+// our fork of fyne.io/systray with radio menu items), which
 // KDE, Quickshell, Waybar and GNOME with the AppIndicator extension show.
 // It needs only the session D-Bus, so it works from the user service.
 package tray
@@ -10,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"fyne.io/systray"
+	"github.com/darkodemic/systray"
 
 	"github.com/darkodemic/gpwebcam/internal/camera"
 	"github.com/darkodemic/gpwebcam/internal/settings"
@@ -52,8 +53,8 @@ type Actions struct {
 	Quit func()
 }
 
-// Tray is the icon and its menu. fyne.io/systray keeps global state, so a
-// process has at most one.
+// Tray is the icon and its menu. The systray package keeps global state, so
+// a process has at most one.
 type Tray struct {
 	log *slog.Logger
 	act Actions

@@ -75,7 +75,7 @@ Order [I]:
 1. A GitHub release with packages from GoReleaser (`.deb`, `.rpm`, `.pkg.tar.zst`, `tar.gz`, checksums). Testing on Arch, Debian trixie and Ubuntu noble, and on Fedora with RPM Fusion ffmpeg and with `ffmpeg-free` + openh264.
 2. AUR: a hand-written source PKGBUILD (name `<n>`, with optdepends); optionally also `<n>-bin` through GoReleaser `aurs` [D: `-bin` suffix required, `.SRCINFO` with every push, SPDX in `license`].
 3. COPR for Fedora [D: a Fedora account is enough].
-4. Debian: an ITP bug, then mentors and a sponsor; the Go team names programs without the `golang-` prefix [D]. Ubuntu takes it from Debian. Estimate 1 to 3 months [I]. A PPA only if Ubuntu is needed sooner.
+4. Debian: an ITP bug, then mentors and a sponsor; the Go team names programs without the `golang-` prefix [D]. Ubuntu takes it from Debian. Estimate 1 to 3 months [I]. A PPA only if Ubuntu is needed sooner. Every Go dependency must be a Debian package too: `github.com/darkodemic/systray` is not, so it needs a package of its own first, and Debian has godbus as `golang-dbus` 5.1.0 while `go.mod` asks for v5.2.2 (checked 2026-10-07; `tray-and-recording.md` §10).
 5. RPM Fusion: a review in Bugzilla, once COPR is stable [D]. Official Fedora does not accept packages that need an out-of-tree kernel module [D].
 6. Optionally openSUSE OBS: one place for apt, yum and pacman repos [D].
 
