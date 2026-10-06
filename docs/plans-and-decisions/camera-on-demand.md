@@ -46,7 +46,7 @@ The service sends STOP and EXIT, and the USB network stays up. It needs to be me
 
 ### 3.4 Resolution without a restart
 
-When no application has video running, the service can reopen the device at the new size. The note "Applies when gpwebcam restarts" then mostly goes away. The exception is an application that has set the format but has not started video: it still holds the format, so the fix from `301bf30` applies and the old size stays.
+When no application has video running, the service can reopen the device at the new size. The note "Applies when gpwebcam restarts" then mostly goes away. The exception is an application that has set the format but has not started video: it still holds the format, so the fix from `8fb1ca7` applies and the old size stays.
 
 ### 3.5 Restart from the menu
 
@@ -91,9 +91,9 @@ Darko, 2026-10-06:
   | `camera off` | the camera stops right away |
   | `camera demand` | the camera stays off |
 
-- Fixes after the test: an unknown key in `settings.json` no longer fails the whole file, but is reported as a warning (`UnknownKeysError`), and `Save` keeps it; otherwise an older build would discard a file with the key `camera` and go back to the defaults (that is how build `dbde29f`, installed 2026-10-06, would behave). Mode off has its own stop reason (`errOff`) and log message; "found camera" is written only on plug-in and on an interface rename.
+- Fixes after the test: an unknown key in `settings.json` no longer fails the whole file, but is reported as a warning (`UnknownKeysError`), and `Save` keeps it; otherwise an older build would discard a file with the key `camera` and go back to the defaults (that is how build `b68f9e7`, installed 2026-10-06, would behave). Mode off has its own stop reason (`errOff`) and log message; "found camera" is written only on plug-in and on an interface rename.
 - Along the way, 2026-10-06: the local checks "on Go 1.22" through `mise exec go@1.22` in this session were not on 1.22, because the shell exported `GOROOT` for 1.27.1, so Go switched to 1.27.1. The real check: `mise exec go@1.22 -- env -u GOROOT -u GOBIN GOTOOLCHAIN=local GOWORK=off go test ./...`. CI uses real Go 1.22 and was green.
-- 2026-10-06: commit `ee8ee18`, CI green. Darko installed the package built from `ee8ee18` (worktree without `go.work`, with checkboxes) and tried it with Zoom, the Camera menu and the restart from the menu: "everything works nicely".
+- 2026-10-06: commit `2a23480`, CI green. Darko installed the package built from `2a23480` (worktree without `go.work`, with checkboxes) and tried it with Zoom, the Camera menu and the restart from the menu: "everything works nicely".
 - 2026-10-06, §3.4 written (tests pass with `-race`, and on real Go 1.22, against `tray.go` and `go.mod` from the commit):
   - `feed.Swap` replaces the device under the feed's lock, so no frame is written between closing the old one and opening the new one. The old output must be closed first, because v4l2loopback has one output format token.
   - `maybeResize` runs only between sessions: while waiting for the camera, while waiting for an application, and before a new session. The conditions are that the configured resolution differs from the one in use, that the module reports usage, and that no application has video running. If the device keeps the old size (an application set the format without video), that resolution is not tried again until the usage changes or until the resolution is chosen again. If the device does not open at any size, the write to the closed output fails and the service exits, so systemd starts it again.

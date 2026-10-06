@@ -154,7 +154,7 @@ Verified 2026-09-29 and 2026-10-05:
 - 2026-10-04: restart after the kernel upgrade, installed `v4l2loopback-dkms`.
 - 2026-10-05: `gw start` works on the camera: 1080p30 on `/dev/video42` in about 4 s; Ctrl+C returns the camera to Off; after `kill -9` the next start stops the leftover stream by itself; after the cable is pulled `gw` exits in about 5.7 s (`first-slice-gw-start.md` §7.1).
 
-- 2026-10-05: first commit `775cf97` on `main`. Wrote `README.md` (description, build, setup, usage, troubleshooting); it waits for Darko's edits before the commit.
+- 2026-10-05: first commit `adb16b7` on `main`. Wrote `README.md` (description, build, setup, usage, troubleshooting); it waits for Darko's edits before the commit.
 - 2026-10-05: Zoom does not see the camera if it was started before `gw`; the fix is `gw` as the only writer to the device, with a placeholder, and `gw run` as a user service (ADR 0003, `second-slice-gw-run.md`). Latency measurement: camera directly 0.25 s, through `gw` about 1.1 s (`first-slice-gw-start.md` §7.2).
 - 2026-10-05: latency through `gw` cut from 1.1 s to 0.18 s (`-fps_mode passthrough`); watchdog for a camera that sends no video after START; Zoom survives pulling and reinserting the cable without a restart (`second-slice-gw-run.md` §3.1, §4).
 
