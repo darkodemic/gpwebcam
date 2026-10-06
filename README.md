@@ -282,4 +282,4 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 
 gpwebcam is licensed under the [Apache License 2.0](LICENSE).
 
-GoPro and HERO are trademarks of GoPro, Inc. gpwebcam is an independent project, not affiliated with or endorsed by GoPro. It was inspired by [jschmid1/gopro_as_webcam_on_linux](https://github.com/jschmid1/gopro_as_webcam_on_linux) and shares no code with it. Camera behavior comes from GoPro's [Open GoPro](https://gopro.github.io/OpenGoPro/) specification and from tests on real hardware.
+GoPro and HERO are trademarks of GoPro, Inc. gpwebcam is an independent project, not affiliated with or endorsed by GoPro. Camera behavior comes from GoPro's [Open GoPro](https://gopro.github.io/OpenGoPro/) specification and from tests on real hardware.
