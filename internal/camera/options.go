@@ -37,6 +37,15 @@ func (r Resolution) Size() (width, height int) {
 	}
 }
 
+// ResolutionFor is the resolution to ask for when frames must be width x
+// height: 720p up to 720 lines, 1080p above. ffmpeg scales to the exact size.
+func ResolutionFor(width, height int) Resolution {
+	if height <= 720 {
+		return Res720
+	}
+	return Res1080
+}
+
 func (r *Resolution) String() string { return string(*r) }
 
 // Set implements flag.Value.

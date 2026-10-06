@@ -20,9 +20,12 @@ type fakeCamera struct {
 	status    WebcamStatus
 	wiredUSB  bool
 	requests  []string
-	failFirst int  // answer this many requests with HTTP 503 first
-	startErr  int  // error code in the start reply
-	lazy      bool // start does not change the status
+	failFirst int // answer this many requests with HTTP 503 first
+	startErr  int // error code in the start reply
+	// refuse answers this many starts like a HERO13 without its battery:
+	// HTTP 500 with error 4 (shutter is active).
+	refuse int
+	lazy   bool // start does not change the status
 }
 
 func (f *fakeCamera) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +50,12 @@ func (f *fakeCamera) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if f.startErr != 0 {
 			fmt.Fprintf(w, `{"status":%d,"error":%d}`, f.status, f.startErr)
+			return
+		}
+		if f.refuse > 0 {
+			f.refuse--
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, "{\n\t\"status\": 1,\n\t\"error\": 4\n}\n\n")
 			return
 		}
 		if !f.lazy {
@@ -84,6 +93,53 @@ func testOptions() StartOptions {
 	return StartOptions{
 		Res: Res1080, FOV: FOVLinear, Port: 8554,
 		Poll: 10 * time.Millisecond, Connect: time.Second, Streaming: 200 * time.Millisecond,
+		Pause: 10 * time.Millisecond,
+	}
+}
+
+func TestStartWebcamCannotCapture(t *testing.T) {
+	start := "/gopro/webcam/start?res=12&fov=4&port=8554&protocol=TS"
+
+	// Refused twice, then started: the third try wins.
+	cam := &fakeCamera{status: StatusOff, refuse: startTries - 1}
+	c := newTestClient(t, cam)
+	o := testOptions()
+	var refused int
+	o.OnRefused = func(err error) {
+		if !errors.Is(err, ErrCannotCapture) {
+			t.Errorf("OnRefused got %v", err)
+		}
+		refused++
+	}
+	if err := c.StartWebcam(context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if refused != startTries-1 {
+		t.Errorf("OnRefused called %d times, want %d", refused, startTries-1)
+	}
+	if n := strings.Count(strings.Join(cam.log(), " "), start); n != startTries {
+		t.Errorf("%d starts, want %d", n, startTries)
+	}
+
+	// Refused every time: the error says so and keeps the camera's reply.
+	cam = &fakeCamera{status: StatusOff, refuse: 1 << 30}
+	c = newTestClient(t, cam)
+	err := c.StartWebcam(context.Background(), testOptions())
+	if !errors.Is(err, ErrCannotCapture) || !IsStatus(err, http.StatusInternalServerError) {
+		t.Errorf("always refused: %v", err)
+	}
+	if n := strings.Count(strings.Join(cam.log(), " "), start); n != startTries {
+		t.Errorf("%d starts, want %d", n, startTries)
+	}
+
+	// Other errors are not tried again.
+	cam = &fakeCamera{status: StatusOff, startErr: 1}
+	c = newTestClient(t, cam)
+	if err := c.StartWebcam(context.Background(), testOptions()); errors.Is(err, ErrCannotCapture) {
+		t.Errorf("error 1 matched ErrCannotCapture: %v", err)
+	}
+	if n := strings.Count(strings.Join(cam.log(), " "), start); n != 1 {
+		t.Errorf("%d starts after error 1, want 1", n)
 	}
 }
 

@@ -191,13 +191,22 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		return err
 	}
 	defer out.Close()
+	res := set.Res
+	kept := false
+	if gw, gh := out.Size(); gw != w || gh != h {
+		// An application has the device open and keeps its size; writing
+		// frames of another size would garble the picture.
+		log.Warn("an application keeps the device at its size; the new resolution applies when gpwebcam restarts with the camera closed in every application",
+			"size", fmt.Sprintf("%dx%d", gw, gh), "wanted", fmt.Sprintf("%dx%d", w, h))
+		w, h, res, kept = gw, gh, camera.ResolutionFor(gw, gh), true
+	}
 	render, err := placeholder.NewRenderer(ctx, f.ffmpeg, w, h)
 	if err != nil {
 		log.Warn("render placeholder, using a plain frame", "err", err)
 	}
 	s := &server{
 		f: f, log: log, live: lv, notify: notifier, feed: feed.New(out, idleInterval), once: once,
-		res: set.Res, width: w, height: h,
+		res: res, width: w, height: h,
 		render: render, pictures: map[string]*placeholder.Picture{}, reported: map[string]bool{},
 	}
 	if set.HWDec == "auto" {
@@ -205,6 +214,10 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	}
 	go s.feed.Run(ctx)
 	log.Info("feeding loopback device", "device", device, "size", fmt.Sprintf("%dx%d", w, h))
+	if kept {
+		s.note(notify.Normal, "GoPro stays at "+fmt.Sprintf("%dx%d", w, h),
+			"An application has the camera open. Close it, then run: systemctl --user restart gpwebcam")
+	}
 	if !once {
 		lv.changed = s.settingsChanged
 		go lv.watch(ctx)
@@ -216,7 +229,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		}
 		defer s.stopTray()
 	}
-	for _, st := range []string{placeholder.NotConnected, placeholder.NoVideo, placeholder.NotAnswering, placeholder.Problem} {
+	for _, st := range []string{placeholder.NotConnected, placeholder.NoVideo, placeholder.NotAnswering, placeholder.Problem, placeholder.CannotCapture} {
 		s.picture(ctx, st, false)
 	}
 
@@ -286,6 +299,9 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 				fmt.Sprintf("Is a firewall blocking UDP port %d? See: journalctl --user -u gpwebcam", f.port))
 		case placeholder.NotAnswering:
 			s.note(notify.Normal, model+" does not answer", "Unplug and replug the USB cable.")
+		case placeholder.CannotCapture:
+			s.note(notify.Normal, model+" cannot start",
+				"Check that its battery is in and charged, then turn the camera off and on.")
 		case placeholder.Problem:
 			s.note(notify.Normal, model+" problem", "gpwebcam keeps retrying. See: journalctl --user -u gpwebcam")
 		}
@@ -306,6 +322,9 @@ func retryStatus(err error, noVideo int, model string) string {
 		return placeholder.Retrying(model)
 	case errors.Is(err, camera.ErrNoAnswer):
 		return placeholder.NotAnswering
+	case errors.Is(err, camera.ErrCannotCapture):
+		// StartWebcam already tried a few times.
+		return placeholder.CannotCapture
 	default:
 		return placeholder.Problem
 	}
@@ -502,6 +521,10 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 		Streaming: 10 * time.Second,
 		OnStatus: func(st camera.WebcamStatus) {
 			log.Info("camera webcam status before start", "status", st)
+		},
+		Pause: time.Second,
+		OnRefused: func(err error) {
+			log.Info("the camera cannot start capturing yet, trying again", "err", err)
 		},
 	})
 	// Stop even after a failed start: the camera may be half way into

@@ -69,3 +69,28 @@ func TestFindByLabel(t *testing.T) {
 		t.Errorf("duplicate label: %v", err)
 	}
 }
+
+func TestAccepted(t *testing.T) {
+	yu12 := func(w, h, bpl uint32) pixFormat {
+		return pixFormat{Width: w, Height: h, PixelFormat: pixFmtYU12, BytesPerLine: bpl}
+	}
+	for _, tc := range []struct {
+		name string
+		p    pixFormat
+		w, h int
+		ok   bool
+	}{
+		{"as asked", yu12(1920, 1080, 1920), 1920, 1080, true},
+		{"kept by a reader", yu12(1280, 720, 1280), 1280, 720, true},
+		{"no bytes per line", yu12(1280, 720, 0), 1280, 720, true},
+		{"other pixel format", pixFormat{Width: 1280, Height: 720, PixelFormat: 'Y' | 'U'<<8 | 'Y'<<16 | 'V'<<24}, 0, 0, false},
+		{"odd size", yu12(1281, 720, 1281), 0, 0, false},
+		{"padded lines", yu12(1280, 720, 1344), 0, 0, false},
+		{"empty", yu12(0, 0, 0), 0, 0, false},
+	} {
+		w, h, err := accepted(tc.p)
+		if (err == nil) != tc.ok || w != tc.w || h != tc.h {
+			t.Errorf("%s: got %dx%d, %v", tc.name, w, h, err)
+		}
+	}
+}

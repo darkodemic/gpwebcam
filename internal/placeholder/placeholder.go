@@ -27,6 +27,8 @@ const (
 	NoVideo      = "No video from camera. Is a firewall blocking UDP?"
 	NotAnswering = "Camera not answering. Unplug and replug the cable."
 	Problem      = "Camera problem, retrying. See the gpwebcam log."
+	// CannotCapture follows camera.ErrCannotCapture.
+	CannotCapture = "Camera cannot start. Is its battery in and charged?"
 )
 
 // WaitingNetwork, Starting and Retrying name the camera; they are shown

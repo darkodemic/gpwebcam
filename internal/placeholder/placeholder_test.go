@@ -11,7 +11,7 @@ import (
 
 func statuses() []string {
 	m := "GoPro HERO13 Black"
-	return []string{NotConnected, NoVideo, NotAnswering, Problem, WaitingNetwork(m), Starting(m), Retrying(m)}
+	return []string{NotConnected, NoVideo, NotAnswering, Problem, CannotCapture, WaitingNetwork(m), Starting(m), Retrying(m)}
 }
 
 func TestValidText(t *testing.T) {
@@ -114,6 +114,20 @@ func TestPictures(t *testing.T) {
 
 	if _, err := r.Picture(ctx, "50%", false); err == nil {
 		t.Error("unsafe text accepted")
+	}
+
+	// Centered text wider than the frame is cut off at both edges, and
+	// the first column with ink is then a few pixels in, not 0 (a
+	// 120-character line started at column 3), so demand a margin. The
+	// longest status lines start at about a fifth of the width.
+	for _, st := range statuses() {
+		p, err := r.Picture(ctx, st, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l := leftmost(p.Frame(0), w, r.y0, r.y1); l < w/20 {
+			t.Errorf("%q does not fit the frame (starts at column %d)", st, l)
+		}
 	}
 }
 

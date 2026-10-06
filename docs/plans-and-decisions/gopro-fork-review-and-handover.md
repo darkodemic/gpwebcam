@@ -37,6 +37,8 @@ Izvori su stari skript `gopro` i README iz forka, Open GoPro specifikacija (`ope
 
 HERO13 sa prvim firmverom v01.10.00 vraćao je HTTP 500 na webcam start; GoPro kaže da je to ispravljeno (Open GoPro FAQ, issue #603).
 
+Baterija, provereno 2026-10-06 na 02.10: kamera je bez baterije, samo na USB napajanju, strimovala oko 2 h. Posle restarta servisa (STOP, pa novi START) svaki START je vraćao HTTP 500 `{"status": 1, "error": 4}` (error 4 = Shutter), i u 720p i u 1080p, ručno i iz `gpwebcam`-a; `/gopro/camera/state` je tada prijavljivao status 1 (baterija prisutna) = 0. Sa vraćenom baterijom, pa gašenje kamere i ponovno priključenje, START radi; status 1 = 1 i 87 %, iako je bočni poklopac otvoren zbog kabla. Pretpostavka, neproverena: bez baterije kamera drži stream koji već radi, ali ne može ponovo da pokrene snimanje. Error 4 se javlja i sa baterijom, ali povremeno: 2026-10-06 u 21:25, pri promeni FOV-a iz tray-a, START 2.3 s posle STOP-a vratio je error 4, a sledeći START je prijavio stream bez videa; slika je stigla tek u trećoj sesiji, oko 20 s posle klika (`tray-and-recording.md` §9).
+
 ## 3. Nalazi iz review-a: šta ne ponoviti
 
 Provereno 2026-09-29 na commit-u `45adee7`. Linije se odnose na fajl `gopro` u forku.

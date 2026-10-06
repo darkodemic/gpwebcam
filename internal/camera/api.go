@@ -26,6 +26,19 @@ const (
 // StartOptions.Connect. A replug usually fixes it.
 var ErrNoAnswer = errors.New("the camera does not answer")
 
+// ErrCannotCapture means webcam start failed with error 4, "shutter is
+// active": the camera cannot start capturing. A HERO13 Black without its
+// battery refused every start this way; with the battery in, one start
+// 2.3 s after a stop did (both 2026-10-06).
+var ErrCannotCapture = errors.New("the camera cannot start capturing")
+
+// errShutter is the webcam error code behind ErrCannotCapture.
+const errShutter WebcamError = 4
+
+// startTries is how many starts StartWebcam sends while the camera answers
+// ErrCannotCapture, StartOptions.Pause apart.
+const startTries = 3
+
 // KeepAliveInterval is the spec's recommended keep-alive period.
 const KeepAliveInterval = 3 * time.Second
 
@@ -74,15 +87,58 @@ func (c *Client) KeepAlive(ctx context.Context) error {
 	return err
 }
 
-// Start asks for an MPEG-TS stream over UDP to the caller's address.
+// Start asks for an MPEG-TS stream over UDP to the caller's address. A
+// refusal with error 4 matches ErrCannotCapture.
 func (c *Client) Start(ctx context.Context, res Resolution, fov FOV, port uint16) error {
 	// The spec wants the arguments in this order.
 	q := fmt.Sprintf("res=%d&fov=%d&port=%d&protocol=TS", res.code(), fov.code(), port)
 	body, err := c.get(ctx, pathStart, q)
-	if err != nil {
-		return err
+	if err == nil {
+		err = checkCommand("webcam start", body)
 	}
-	return checkCommand("webcam start", body)
+	if code, ok := replyCode(err); ok && code == errShutter {
+		return fmt.Errorf("%w: %w", ErrCannotCapture, err)
+	}
+	return err
+}
+
+// replyCode returns the webcam error code that err carries: from a
+// ReplyError, or from an HTTP error whose body is a webcam reply. A HERO13
+// answers a refused start with HTTP 500 and {"status":1,"error":4}.
+func replyCode(err error) (WebcamError, bool) {
+	var re *ReplyError
+	if errors.As(err, &re) {
+		return re.Code, true
+	}
+	var se *StatusError
+	if errors.As(err, &se) {
+		var raw rawReply
+		if json.Unmarshal([]byte(se.Body), &raw) == nil && raw.Error != nil {
+			return *raw.Error, true
+		}
+	}
+	return 0, false
+}
+
+// startTrying sends start up to startTries times while the camera answers
+// ErrCannotCapture, which can pass by itself after a stop.
+func (c *Client) startTrying(ctx context.Context, o StartOptions) error {
+	for try := 1; ; try++ {
+		err := c.Start(ctx, o.Res, o.FOV, o.Port)
+		if err == nil || !errors.Is(err, ErrCannotCapture) || try == startTries {
+			return err
+		}
+		if o.OnRefused != nil {
+			o.OnRefused(err)
+		}
+		t := time.NewTimer(o.Pause)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return err
+		case <-t.C:
+		}
+	}
 }
 
 // Stop ends the stream; the camera stays in webcam mode.
@@ -117,6 +173,10 @@ type StartOptions struct {
 	Streaming time.Duration
 	// OnStatus, if set, gets the webcam status read before Start.
 	OnStatus func(WebcamStatus)
+	// Pause separates starts after ErrCannotCapture.
+	Pause time.Duration
+	// OnRefused, if set, gets each ErrCannotCapture that is tried again.
+	OnRefused func(error)
 }
 
 // StartWebcam follows the spec's webcam state machine: wired USB control
@@ -142,7 +202,7 @@ func (c *Client) StartWebcam(ctx context.Context, o StartOptions) error {
 		// idle instead of off, and GoPro's workaround is a start followed
 		// at once by a stop. Without it, the first start after a replug
 		// twice reported streaming but sent nothing (2026-10-05).
-		if err := c.Start(ctx, o.Res, o.FOV, o.Port); err != nil {
+		if err := c.startTrying(ctx, o); err != nil {
 			return fmt.Errorf("start-stop workaround for an idle camera: %w", err)
 		}
 		if err := c.Stop(ctx); err != nil {
@@ -156,7 +216,7 @@ func (c *Client) StartWebcam(ctx context.Context, o StartOptions) error {
 		}
 	}
 
-	if err := c.Start(ctx, o.Res, o.FOV, o.Port); err != nil {
+	if err := c.startTrying(ctx, o); err != nil {
 		return err
 	}
 	sctx, cancel := context.WithTimeout(ctx, o.Streaming)

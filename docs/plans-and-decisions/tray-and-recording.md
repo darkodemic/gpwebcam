@@ -155,4 +155,24 @@ Uz svaki presek: README, man stranica, `doctor` (tray host, folder za snimke) i 
   - Privremeni demo program na Quickshell-u: ikonica se registruje i nestaje, ponovo se pokreće u istom procesu (sakrij pa `config tray on` radi bez restarta), tooltip i meni se menjaju, a klikovi poslati kroz `com.canonical.dbusmenu.Event` stižu do podešavanja.
   - v4l2loopback 0.15.4 (`vidioc_try_fmt_vid`): dok čitač drži format, pisac pri `S_FMT` dobije stari format bez greške. Zato rezolucija uživo nije bezbedna; `OpenOutput` povratni format i ne proverava.
   - Binarni fajl je i dalje statički, 9.2 MB umesto 7.1 MB (D-Bus i tray). Dependabot sada prati i Go module.
-- Sledeće: provera sa servisom i kamerom (§8): FOV iz menija uz otvoren Zoom, sakrivanje i vraćanje ikonice, restart Quickshell-a; zatim commit preseka 1 i presek 2.
+- 2026-10-06: commit `dbde29f`, CI zelen. Darko instalirao snapshot paket; `gpwebcam config res 720` pa restart servisa: uređaj `YU12:1280x720@30`, ikonica registrovana kod Quickshell-a, `doctor` bez problema. Sa kamerom: prvo HTTP 500 sa error 4 (Shutter) na svaki START, jer kamera nije imala bateriju (predajna beleška §2); sa baterijom 720p, linear i VAAPI rade, video 4.5 s posle priključenja.
+- Nađeno usput, ispravke čekaju Darkovu odluku: (1) `v4l2.OpenOutput` ne proverava format koji je drajver prihvatio, pa bi start u drugoj rezoluciji dok aplikacija drži uređaj dao pokvarenu sliku; predlog je da servis nastavi u veličini koju uređaj ima, a nova rezolucija čeka sledeći restart. (2) Error 4 se prikazuje kao opšti "Camera problem"; predlog je posebna poruka na zamenskoj slici i u notifikaciji (baterija, pa gašenje kamere).
+- 2026-10-06, proba iz menija sa kamerom (720p), Darko: "sve radi". Iz loga, od klika do "video is flowing":
+
+  | Izmena | Vreme |
+  |---|---|
+  | FOV wide | 5.8 s |
+  | FOV superview | oko 20 s: START 2.3 s posle STOP-a vratio error 4; sledeći START prijavio stream bez videa, pa stop i START posle 3 s i watchdog posle 6 s; slika u trećoj sesiji |
+  | FOV narrow | 5.5 s |
+  | FOV linear | 5.5 s |
+  | hwdec none | 5.4 s |
+  | hwdec auto | 5.7 s |
+
+  Hide icon u 21:29:58, `gpwebcam config tray on` u 21:30:05: ikonica ponovo registrovana bez restarta servisa. Pri svakom startu sa VAAPI-jem ffmpeg upiše tri linije "hardware accelerator failed to decode picture" pre prvog frejma; ima ih i u logu buildova od 2026-10-05, pa nisu nove.
+- Ideja posle superview slučaja: kad START vrati error 4, ponoviti START posle oko 1 s u istoj sesiji, umesto da se sesija završi i čeka `retryDelay`.
+- 2026-10-06: Darko odobrio ispravke (1) i (2), a ponovni START posle error 4 "ako možeš sam da ga obradiš". Urađeno (testovi prolaze sa `-race`, i na Go 1.22):
+  - `v4l2.OpenOutput` čita format koji je `S_FMT` vratio. Drugi pixel format je greška; druga veličina se prihvata. Servis tada nastavlja u toj veličini, kameru traži u rezoluciji te veličine (`camera.ResolutionFor`), upiše upozorenje u log i pošalje notifikaciju, a tray prikazuje da nova rezolucija čeka restart. Potvrđeno u v4l2loopback 0.15.4 (`vidioc_s_fmt_vid`): pisac dobija OUTPUT token i stari format, bez `EBUSY`.
+  - `camera.ErrCannotCapture` za error 4, i kad stigne kao HTTP 500 sa JSON telom (HERO13). `StartWebcam` šalje START do 3 puta, 1 s razmaka, dok kamera vraća error 4; posle toga sesija se završava, zamenska slika kaže "Camera cannot start. Is its battery in and charged?", a notifikacija predlaže proveru baterije i gašenje kamere. Da li ponovljeni START pomaže u slučaju sa baterijom, nije provereno, jer se ne može namerno izazvati; test sa lažnom kamerom pokriva oba ishoda.
+  - Test za zamensku sliku sada proverava da svaka poruka staje u sliku. Prvi pokušaj (`leftmost <= 0`) ne bi ništa uhvatio: red od 120 znakova počinje u koloni 3, jer ffmpeg odseca slova na ivici; sada se traži margina od 1/20 širine. Nova poruka počinje na 131 px od 640, "Camera not answering…" na 122.
+- 2026-10-06, ispravka (1) uživo: ffmpeg čitač (`-f v4l2 -i /dev/video42`) drži uređaj u 720p; servis zaustavljen, čitač ostaje; build iz radnog stabla sa `-res 1080` upiše "an application keeps the device at its size" (`size=1280x720 wanted=1920x1080`), uređaj ostaje `YU12:1280x720`, kamera krene u 720p i video teče za 4.2 s. Usput: ffmpeg čitač kome je pisac nestao ne reaguje na SIGTERM, tek na SIGKILL; zbog toga je kamera u probi stajala oko 2 min.
+- Sledeće: commit ispravki, pa presek 2.
