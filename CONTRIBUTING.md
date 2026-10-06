@@ -4,7 +4,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 
 ## Tools
 
-- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Besides the standard library, only the tray icon has dependencies: `fyne.io/systray` and, through it, `github.com/godbus/dbus/v5`. Both are pure Go, so the binary stays static. `go.mod` replaces `fyne.io/systray` with our fork [darkodemic/systray](https://github.com/darkodemic/systray), which adds radio menu items ([fyne-io/systray#135](https://github.com/fyne-io/systray/pull/135)); imports stay `fyne.io/systray`.
+- **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Besides the standard library, gpwebcam has two dependencies: [`github.com/darkodemic/systray`](https://github.com/darkodemic/systray) for the tray icon, our fork of `fyne.io/systray` that adds radio menu items and has its own releases since v1.13.0, and `github.com/godbus/dbus/v5`, which the fork uses and gpwebcam calls directly for systemd and the file manager. Both are pure Go, so the binary stays static.
 - **ffmpeg**, for the tests that run the real ffmpeg and for running gpwebcam.
 - **GoReleaser**, for building packages, also pinned in `mise.toml`.
 - With [mise](https://mise.jdx.dev), `mise install` in the repository installs both. If your shell does not activate mise, prefix commands with `mise exec --`, e.g. `mise exec -- go test ./...`. CI uses the same `mise.toml`.
@@ -16,7 +16,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 |---|---|
 | `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, camera on demand (`demand.go`), restart through systemd's D-Bus API (`systemd.go`), recording (`recording.go`), the control API on a Unix socket for `gpwebcam record` (`control.go`, `recordcmd.go`), the file manager over D-Bus (`filemanager.go`), and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
 | `internal/settings` | The settings that the tray menu and `gpwebcam config` change, with their checks, saved as JSON in `~/.config/gpwebcam/settings.json`. |
-| `internal/tray` | The tray icon and its menu through `fyne.io/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
+| `internal/tray` | The tray icon and its menu through `github.com/darkodemic/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
 | `internal/stream` | Receives the camera's MPEG-TS datagrams over UDP, watches that they keep coming, and runs ffmpeg, which decodes them from one pipe and hands raw frames back over another. |

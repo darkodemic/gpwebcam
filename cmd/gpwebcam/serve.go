@@ -258,7 +258,7 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		s.watchUsage(ctx, device)
 		lv.changed = s.settingsChanged
 		go lv.watch(ctx)
-		// fyne.io/systray reports through the standard logger.
+		// The systray package reports through the standard logger.
 		stdlog.SetFlags(0)
 		stdlog.SetOutput(newLineLogger(log, "systray"))
 		if set.Tray {
