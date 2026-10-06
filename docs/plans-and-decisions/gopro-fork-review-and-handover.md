@@ -1,6 +1,6 @@
 # GoPro webcam na Linuxu: nalazi iz review-a forka i predaja
 
-- **Status:** Radna beleška, ažurirana 2026-10-05. Od 2026-10-05 program se zove `gpwebcam` (ADR 0005); ova beleška i stariji dokumenti ga zovu `gw`. Piše se od nule, u Go-u (ADR 0001), a kamerom se upravlja preko Open GoPro API-ja (ADR 0002). Prvi presek `gw start` radi na kameri: 1080p30 na `/dev/video42` (§9).
+- **Status:** Radna beleška, ažurirana 2026-10-06. Od 2026-10-05 program se zove `gpwebcam` (ADR 0005); ova beleška i stariji dokumenti ga zovu `gw`. Piše se od nule, u Go-u (ADR 0001), a kamerom se upravlja preko Open GoPro API-ja (ADR 0002). Tag `v0.1.0` 2026-10-06 (`release-0.1.0.md`); sledi 0.2.0 sa tray ikonicom i snimanjem (`tray-and-recording.md`, §9).
 - **Date:** 2026-09-29
 - **Owner:** Darko
 - **Related:** ADR 0001 (Go kao jezik implementacije); ADR 0002 (Open GoPro HTTP API za upravljanje kamerom); `first-slice-gw-start.md`; `open-gopro-webcam-api.md`; `upstream-issues-review.md`; fork `darkodemic/gopro_as_webcam_on_linux` (lokalno `~/Projects/gopro_as_webcam_on_linux`, do 2026-09-29 `gopro-tux`); upstream `jschmid1/gopro_as_webcam_on_linux`
@@ -163,10 +163,14 @@ Provereno 2026-10-05: radi kernel `7.2.8-arch1-2`, isti kao `linux`, `linux-head
 
 - 2026-10-05: licenca Apache-2.0 (ADR 0004); ime `gpwebcam`, paketi kroz GoReleaser i podešavanje modula kroz `/usr/lib/modprobe.d` (ADR 0005, `packaging-and-release.md`).
 
+- 2026-10-05: spisak za izdanje 0.1.0 i sve njegove stavke (`release-0.1.0.md`): paket i user servis provereni na Darkovoj mašini, paketi u kontejnerima za Debian, Ubuntu, Fedoru i Arch, privatan GitHub repo sa CI-jem i release workflow-om.
+- 2026-10-06: potpisan tag `v0.1.0`, draft release napravljen (`release-0.1.0.md` §5). Darko predložio tray ikonicu sa podešavanjima i snimanjem; plan za 0.2.0 je `tray-and-recording.md`.
+
 Sledeće:
 
-1. Instalacija lokalno napravljenog paketa i test servisa (`packaging-and-release.md` §7). Servis pod systemd-om i README za `gw run` (`second-slice-gw-run.md` §5). Kašnjenje je rešeno 2026-10-05: 0.18 s u Zoom-u (`-fps_mode passthrough`, `second-slice-gw-run.md` §4).
-2. Ostatak iz `first-slice-gw-start.md` §8: watchdog za pakete, provera rute, instalacija.
+1. Darko objavljuje draft `v0.1.0`; restart i ostatak M1 (`release-0.1.0.md` §1). Problem posle restarta ide u 0.1.1.
+2. 0.2.0: tray ikonica i snimanje (`tray-and-recording.md`). Snimanje kroz sopstveni UDP prijem pokriva i watchdog za pakete iz `first-slice-gw-start.md` §8.
+3. Ostatak iz `first-slice-gw-start.md` §8: provera da ruta ka kameri ide preko GoPro interfejsa (`doctor` je već proverava).
 
 ## 10. Ideje za kasnije
 

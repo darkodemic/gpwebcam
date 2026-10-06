@@ -1,6 +1,6 @@
 # Izdanje 0.1.0
 
-- **Status:** U izradi. Obim odlučen 2026-10-05: M1 do M4, F1, F2, F4, O1 do O4; F3 (snimanje) ide posle 0.1.0.
+- **Status:** Tag `v0.1.0` 2026-10-06, draft release čeka Darkovu objavu. Od M1 ostalo: servis pri prijavi posle restarta i Zoom sa paketom; ako nešto ne radi, ispravka ide u 0.1.1. Obim odlučen 2026-10-05: M1 do M4, F1, F2, F4, O1 do O4; F3 (snimanje) ide u 0.2.0 zajedno sa tray ikonicom (`tray-and-recording.md`).
 - **Date:** 2026-10-05
 - **Owner:** Darko
 - **Related:** `packaging-and-release.md` §6 (kanali), §7; `second-slice-gw-run.md` §3.1, §5; ADR 0005 (ime gpwebcam i paketi kroz GoReleaser); predajna beleška §10 (ideje)
@@ -34,6 +34,7 @@
 
 ## 4. Posle 0.1.0
 
+- 0.2.0: tray ikonica sa podešavanjima i snimanje (F3), `tray-and-recording.md`.
 - AUR: izvorni PKGBUILD `gpwebcam` (sa `optdepends`) i `gpwebcam-bin` preko GoReleaser `aurs` (`packaging-and-release.md` §6).
 - COPR za Fedoru; Debian ITP; RPM Fusion.
 - Više kamera istovremeno.
@@ -75,4 +76,5 @@
   - Poruka posle instalacije: reboot ili ponovno učitavanje samo ako je modul bio učitan pre instalacije (na Arch-u ga systemd hook učita pri instalaciji); dodat korak `gpwebcam doctor`.
 - 2026-10-05: commit `3b1cc56` push-ovan; CI zelen na sva tri posla posle oporavka GitHub Actions (23:35).
 - 2026-10-05: Darko pitao zašto Go nije u `mise.toml`. Bio je propust: globalni `go latest` je davao 1.26.8, a najnoviji je 1.27.1. Sada `mise.toml` zakucava Go 1.27.1 uz GoReleaser 2.18.2; `go.mod` ostaje `go 1.22` kao minimum. Sa go1.27.1 (kroz `mise exec`, jer shell sesije ima Go u PATH-u mimo `mise.toml`) `vet`, `go test -race` i build paketa prolaze, binarni fajl nosi go1.27.1. CI test i paketi i release workflow sada instaliraju alate iz `mise.toml` (`jdx/mise-action` v5.1.1, zakucan na commit); test na Go 1.22 ostaje preko `setup-go`.
-- Sledeće: restart kad Darku odgovara (servis pri prijavi, modul pri boot-u); tag `v0.1.0`.
+- 2026-10-06: Darko odlučio da tag ide pre restarta; ostatak M1 se proverava posle, a problem znači 0.1.1. Potpisan anotiran tag `v0.1.0` na `56797e8` (CI zelen na sva tri posla), push samo taga. Release workflow prošao za 49 s; draft ima `.deb`, `.rpm` i Arch paket za amd64 i arm64, dve `tar.gz` arhive i `checksums.txt`. Provereno: checksum amd64 arhive se slaže, binarni fajl prijavljuje `gpwebcam 0.1.0`. GoReleaser `changelog.sort: asc` slaže commit-e po abecedi naslova, a ne po vremenu, i sa punim hash-om; tekst release-a treba srediti pre objave, a podešavanje promeniti za sledeće izdanje.
+- Sledeće: Darko objavljuje draft; restart kad mu odgovara (servis pri prijavi, modul pri boot-u, Zoom sa paketom). Tray ikonica i snimanje su plan za 0.2.0 (`tray-and-recording.md`).
