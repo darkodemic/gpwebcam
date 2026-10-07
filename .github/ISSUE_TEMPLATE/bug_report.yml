@@ -1,0 +1,51 @@
+name: Bug report
+description: Something does not work as the README says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please run `gpwebcam doctor` first: it finds most setup problems and says how to fix them.
+
+        The output of `gpwebcam doctor` and the log contain your home folder's path and the camera's address on the USB link, whose second and third numbers hold the last three digits of the camera's serial number. Edit them out if you prefer.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: camera
+    attributes:
+      label: Camera model and firmware
+      description: For example "HERO13 Black, 02.10". On the camera, Preferences > About > Camera Info.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: gpwebcam version
+      description: The output of `gpwebcam version`.
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distribution and desktop
+      description: For example "Fedora 44, GNOME" or "Arch Linux, KDE Plasma".
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of gpwebcam doctor
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The part of `journalctl --user -u gpwebcam -e` from around the problem.
+      render: text

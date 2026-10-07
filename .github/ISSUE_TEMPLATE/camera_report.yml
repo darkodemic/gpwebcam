@@ -1,0 +1,43 @@
+name: Camera model report
+description: Tell whether gpwebcam works with your GoPro model; only the HERO13 Black is tested so far.
+labels: [camera report]
+body:
+  - type: input
+    id: camera
+    attributes:
+      label: Camera model and firmware
+      description: For example "HERO12 Black, 02.32". On the camera, Preferences > About > Camera Info.
+    validations:
+      required: true
+  - type: dropdown
+    id: works
+    attributes:
+      label: Does it work?
+      options:
+        - "Yes"
+        - Partly
+        - "No"
+    validations:
+      required: true
+  - type: checkboxes
+    id: features
+    attributes:
+      label: What works
+      options:
+        - label: Video at 1080p
+        - label: Video at 720p
+        - label: Changing the field of view
+        - label: Camera on demand (it starts when an application turns its video on)
+        - label: Recording
+  - type: input
+    id: version
+    attributes:
+      label: gpwebcam version and distribution
+      description: For example "0.2.0, Ubuntu 24.04".
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything that did not work, and the output of `gpwebcam doctor` if it helps. It contains your home folder's path and the camera's address, which holds the last three digits of its serial number in its second and third numbers; edit them out if you prefer.
