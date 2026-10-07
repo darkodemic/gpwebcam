@@ -285,6 +285,12 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 - One camera at a time.
 - One application at a time can use the camera. This is a V4L2 rule that v4l2loopback enforces since version 0.14, the same as for a USB webcam.
 
+## Reporting problems
+
+- Something does not work: open an [issue](https://github.com/darkodemic/gpwebcam/issues/new/choose) with the output of `gpwebcam doctor`.
+- Another camera model: tell whether it works with a camera model report, also under [issues](https://github.com/darkodemic/gpwebcam/issues/new/choose).
+- A security problem: report it privately, as [SECURITY.md](SECURITY.md) says.
+
 ## License
 
 gpwebcam is licensed under the [Apache License 2.0](LICENSE).
