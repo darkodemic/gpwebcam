@@ -1,6 +1,6 @@
 # GoPro webcam on Linux: fork review findings and handover
 
-- **Status:** Working note, updated 2026-10-06. Since 2026-10-05 the program is called `gpwebcam` (ADR 0005); this note and older documents call it `gw`. It is written from scratch, in Go (ADR 0001), and the camera is controlled through the Open GoPro API (ADR 0002). Tag `v0.1.0` on 2026-10-06 (`release-0.1.0.md`); next is 0.2.0 with a tray icon and recording (`tray-and-recording.md`, §9).
+- **Status:** Working note, updated 2026-10-07. Since 2026-10-05 the program is called `gpwebcam` (ADR 0005); this note and older documents call it `gw`. It is written from scratch, in Go (ADR 0001), and the camera is controlled through the Open GoPro API (ADR 0002). Releases `v0.1.0` and `v0.2.0` are published in the public repository `darkodemic/gpwebcam` (`release-0.1.0.md`, `release-0.2.0.md`, §9).
 - **Date:** 2026-09-29
 - **Owner:** Darko
 - **Related:** ADR 0001 (Go as the implementation language); ADR 0002 (Open GoPro HTTP API for camera control); `first-slice-gw-start.md`; `open-gopro-webcam-api.md`; `upstream-issues-review.md`; fork `darkodemic/gopro_as_webcam_on_linux` (locally `~/Projects/gopro_as_webcam_on_linux`, `gopro-tux` until 2026-09-29); upstream `jschmid1/gopro_as_webcam_on_linux`
@@ -163,11 +163,15 @@ Verified 2026-09-29 and 2026-10-05:
 - 2026-10-05: the list for release 0.1.0 and all its items (`release-0.1.0.md`): package and user service verified on the test machine, packages in containers for Debian, Ubuntu, Fedora and Arch, a private GitHub repo with CI and a release workflow.
 - 2026-10-06: signed tag `v0.1.0`, draft release created (`release-0.1.0.md` §5). Darko proposed a tray icon with settings and recording; the plan for 0.2.0 is `tray-and-recording.md`.
 
-Next:
+- 2026-10-06 and 2026-10-07: release 0.2.0 (`tray-and-recording.md`, `camera-on-demand.md`): tray icon and settings, camera on demand, resolution without a restart, gpwebcam's own UDP receiver with the packet watchdog, recording, Quit and the "GoPro Webcam" launcher. The tray uses the fork `github.com/darkodemic/systray` v1.13.0.
+- 2026-10-07: the plans were translated into English; personal details of the test machine were removed from the documents and the whole history, and the rewritten history went to a new public repository `darkodemic/gpwebcam` (the old one is the private `darkodemic/gpwebcam-private-archive`). `v0.1.0` and `v0.2.0` are published (`release-0.2.0.md` §5).
 
-1. Darko publishes the `v0.1.0` draft; restart and the rest of M1 (`release-0.1.0.md` §1). A problem after a restart goes into 0.1.1.
-2. 0.2.0: tray icon and recording (`tray-and-recording.md`). Recording through our own UDP receiver also covers the packet watchdog from `first-slice-gw-start.md` §8.
-3. Left over from `first-slice-gw-start.md` §8: a check that the route to the camera goes through the GoPro interface (`doctor` already checks it).
+Next (`release-0.2.0.md` §3):
+
+1. AUR: a source PKGBUILD and `gpwebcam-bin`; then COPR and RPM Fusion; a Debian ITP once `github.com/darkodemic/systray` is a Debian package.
+2. Darko's own icon, as an SVG, for the tray and the launcher.
+3. A second device "GoPro 2", RTSP for networks with a firewall, several cameras.
+4. Left over from `first-slice-gw-start.md` §8: a check at run time that the route to the camera goes through the GoPro interface (`doctor` already checks it).
 
 ## 10. Ideas for later
 
