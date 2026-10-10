@@ -1,6 +1,6 @@
 # Tray icon and recording (0.2.0)
 
-- **Status:** Accepted 2026-10-06: tray through `fyne.io/systray`, since 2026-10-06 from the fork `darkodemic/systray`, since 2026-10-07 as its own module `github.com/darkodemic/systray` v1.13.0 (§3.2, §10), in the same process as `gpwebcam run` (§3), slices in order: tray, own UDP receiver, recording (§7). The target is release 0.2.0.
+- **Status:** Accepted 2026-10-06: tray through `fyne.io/systray`, since 2026-10-06 from the fork `darkodemic/systray`, since 2026-10-07 as its own module `github.com/darkodemic/systray` v1.13.0 (§3.2, §10), in the same process as `gpwebcam run` (§3), slices in order: tray, own UDP receiver, recording (§7). The target is release 0.2.0. Since 2026-10-08 the tray and the launcher use Darko's application icon (§10).
 - **Date:** 2026-10-06
 - **Owner:** Darko
 - **Related:** `release-0.1.0.md` §2 (F3), §4; handover note §10.1 (notifications), §10.2 (recording); `first-slice-gw-start.md` §8 (packet watchdog); ADR 0001 (Go as the implementation language); ADR 0003 (gpwebcam owns the device as a user service)
@@ -73,7 +73,7 @@ Only a menu, no window: a window needs a GUI library, and that is a much larger 
 - Notifications (checkbox)
 - Hide icon
 
-The icon shows the state. As Darko asked on 2026-10-06 (`camera-on-demand.md` §4): white while video flows, orange when there is a problem, faded white otherwise; while recording, it gets a red dot.
+The icon shows the state. As Darko asked on 2026-10-06 (`camera-on-demand.md` §4): white while video flows, orange when there is a problem, faded white otherwise; while recording, it gets a red dot. Since 2026-10-08 it is Darko's application icon instead (§10, 2026-10-08).
 
 ### 3.4 Turning the icon off
 
@@ -217,7 +217,10 @@ With every slice: README, man page, `doctor` (tray host, recordings folder), and
 - 2026-10-07: slice 3 committed together with Quit and the launcher (`ccabf7f`), CI green. The plans were translated into English, personal details of the test machine were removed from the whole history, and the rewritten history went to a new public repository `darkodemic/gpwebcam`; the old one stays private as `darkodemic/gpwebcam-private-archive`. `v0.1.0` published.
 - 2026-10-07: gpwebcam moves to `github.com/darkodemic/systray` v1.13.0 (§10).
 - 2026-10-07: everything in this plan is in release 0.2.0 (`release-0.2.0.md`).
-- Next: `release-0.2.0.md` §3.
+- 2026-10-08: Darko's application icon in the tray, the launcher and notifications (§10).
+- 2026-10-09: the tray icon larger, always in color, with a dot per state (§10).
+- 2026-10-10: the icon goes into release 0.3.0 (`release-0.3.0.md`).
+- Next: `release-0.3.0.md` §3.
 
 ## 10. Amendments
 
@@ -229,3 +232,32 @@ The fork is renamed from `fyne.io/systray` to `github.com/darkodemic/systray` (f
 - §3.2, "`replace` instead of renaming the module", no longer applies.
 - Consequences: `go install …@latest` is no longer blocked by `replace`. Dependabot now opens pull requests for new releases of the fork, so updating it by hand is no longer needed. For a Debian ITP (`packaging-and-release.md` §6, step 4) there is now a renamed module with tags, but it would have to exist as a Debian package of its own, like any Go dependency; `fyne.io/systray` is not in Debian either. godbus is in Debian as `golang-dbus` 5.1.0 (bookworm, trixie, forky and sid, checked 2026-10-07 on sources.debian.org), so either gpwebcam builds with 5.1.0 there or `golang-dbus` needs an update.
 - Upstream PR fyne-io/systray#135 (radio items) was closed 2026-10-06, when its branch was deleted. Darko does not reopen it.
+
+### 2026-10-08: Darko's application icon
+
+Darko drew the application icon (`media/gpwebcam-logo.svg` in his checkout, 256x256, a charcoal action camera with a teal display, fully vector) and asked to try it in the tray first; his monochrome outline icon stays in reserve, in case the logo does not work on some panel.
+
+- `packaging/icons/gpwebcam.svg` is the logo with neutral metadata (`<title>gpwebcam</title>`, no brand names in the description and comments; the drawing is unchanged). The packages install it as `/usr/share/icons/hicolor/scalable/apps/gpwebcam.svg`; the menu entry has `Icon=gpwebcam` and notifications `--icon=gpwebcam`, instead of `camera-web` from the theme.
+- The packages depend on `hicolor-icon-theme` (`packaging-and-release.md` §3); namcap reported its absence as an error. With it, namcap, lintian and rpmlint report only the known findings from CONTRIBUTING (2026-10-08).
+- The Go standard library has no SVG renderer, so `rsvg-convert` (librsvg 2.62.4) renders the logo to `internal/tray/icon.png`, 64x64, through `go generate ./internal/tray`; the PNG is committed and embedded with `//go:embed`. The render is reproducible: the same SHA-256 on a second run. Building gpwebcam needs nothing new, and there is no new Go dependency.
+- The states, drawn in code over the logo (replacing the white camera from §3.3 and `camera-on-demand.md` §4): the logo as it is while video flows, an orange dot at the bottom right on a problem, gray at 55 % opacity otherwise, and a red dot at the top right while recording. Replaced on 2026-10-09 (below).
+- Checked 2026-10-08 on renders scaled to 22 and 32 px, on a dark (`#2b2e33`), black and light (`#eff0f1`) panel: the logo stays recognizable at 22 px, the dots are clear, and the faded icon is visible but plainly inactive. On Darko's panel the next day it looked too small and too pale (below).
+
+### 2026-10-09: a larger logo, always in color, a dot per state
+
+Darko tried the first version on his panel: the tray slot (22 px, set by his Quickshell bar for every tray icon) looked small, and the gray, faded icon read as a pale square. The menu entry showed a generic gear, because the bar had been running since before the icon was installed: the icon was in `/usr/share/icons/hicolor/icon-theme.cache` and a new process found it (GTK lookup), but Qt in the running bar kept its earlier view of the theme and fell back to `application-x-executable`, a gear in Papirus. Restarting the bar is the fix; nothing in the package.
+
+- The tray render is 72x72 cropped to the middle 64x64 (`rsvg-convert --page-width 64 --page-height 64 --left=-4 --top=-4`), so the body fills the slot's width: 62 px instead of 55 px of 64, about 12 % larger. The soft shadow under the body is cut at the edges, where it is invisible anyway.
+- The logo is always in color. The state is a dot at the bottom right, over the cooling ribs, chosen by Darko from the proposal on 2026-10-09:
+
+  | State (`tray.State`) | When | Dot |
+  |---|---|---|
+  | `Live` | video flows | green |
+  | `Starting` | the camera was found and is starting, waits for its network, or is retried after a session without video | blue |
+  | `Ready` | camera mode demand: the camera waits for an application | blue |
+  | `Paused` | camera mode off | gray |
+  | `Trouble` | a problem the placeholder names (no answer, cannot capture, no video at all, other errors) | orange |
+  | `NoCamera` | no camera connected | none |
+
+  Recording adds the red dot at the top right, over the lens cover's corner, next to the state dot. Each dot keeps its thin dark rim for light panels. The tooltip and the first menu line say the state in words, for those who cannot tell green from orange.
+- `GET /v1/status` reports the six states as `no-camera`, `starting`, `ready`, `paused`, `live` and `trouble`, instead of `off`, `live` and `trouble`; `gpwebcam record` does not read the field.

@@ -73,6 +73,8 @@ nfpms:
     bindir: /usr/bin
     dependencies:
       - ffmpeg
+      # Owns the icon's directories and refreshes the icon cache.
+      - hicolor-icon-theme
     contents:
       - src: packaging/systemd/gpwebcam.service
         dst: /usr/lib/systemd/user/gpwebcam.service
@@ -89,6 +91,11 @@ nfpms:
       # "GoPro Webcam" in the application menu runs gpwebcam launch.
       - src: packaging/desktop/gpwebcam.desktop
         dst: /usr/share/applications/gpwebcam.desktop
+        file_info:
+          mode: 0644
+      # The application icon, for the menu entry and notifications.
+      - src: packaging/icons/gpwebcam.svg
+        dst: /usr/share/icons/hicolor/scalable/apps/gpwebcam.svg
         file_info:
           mode: 0644
       # RPM marks documentation as such (rpmlint), so the man page and
@@ -162,6 +169,7 @@ nfpms:
         # Fedora's ffmpeg-free does not provide the name "ffmpeg".
         dependencies:
           - /usr/bin/ffmpeg
+          - hicolor-icon-theme
         recommends:
           - v4l2loopback
     deb:

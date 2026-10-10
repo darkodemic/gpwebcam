@@ -32,6 +32,8 @@ The same on Arch, Debian and Fedora [D]; `<n>` is the new name:
 | module loading | `/usr/lib/modules-load.d/<n>.conf` |
 | module options | `/usr/lib/modprobe.d/99-<n>.conf`; Debian does not allow `/lib/...` (lintian `aliased-location`) |
 | man page | `/usr/share/man/man1/<n>.1.gz`; without it Debian gives a lintian warning |
+| menu entry | `/usr/share/applications/<n>.desktop`, checked with `desktop-file-validate` |
+| application icon | `/usr/share/icons/hicolor/scalable/apps/<n>.svg`; the package depends on `hicolor-icon-theme`, which owns the directories and has `index.theme`, without which the theme is not searched (namcap reports the missing dependency as an error). The icon cache is refreshed by the distributions' own hooks: on Debian the trigger of `hicolor-icon-theme`, on Arch the pacman hook of `gtk-update-icon-cache`, on Fedora its file trigger (checked in containers 2026-10-08) |
 | README | `/usr/share/doc/<n>/README.md` |
 | license | Arch: `/usr/share/licenses/<n>/LICENSE` (not required for Apache-2.0, the `licenses` package has it); Fedora: the same, as `%license`; Debian: `/usr/share/doc/<n>/copyright` in DEP-5 format, with a reference to `/usr/share/common-licenses/Apache-2.0` |
 

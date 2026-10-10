@@ -7,6 +7,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 - **Go.** `mise.toml` pins the Go that builds releases (currently 1.27.1); `go.mod` only requires Go 1.22, the oldest version the code supports, so Debian stable can build the package. Besides the standard library, gpwebcam has two dependencies: [`github.com/darkodemic/systray`](https://github.com/darkodemic/systray) for the tray icon, our fork of `fyne.io/systray` that adds radio menu items and has its own releases since v1.13.0, and `github.com/godbus/dbus/v5`, which the fork uses and gpwebcam calls directly for systemd and the file manager. Both are pure Go, so the binary stays static.
 - **ffmpeg**, for the tests that run the real ffmpeg and for running gpwebcam.
 - **GoReleaser**, for building packages, also pinned in `mise.toml`.
+- **rsvg-convert** (librsvg), only to change the icon: `go generate ./internal/tray` renders the tray image `internal/tray/icon.png` from `packaging/icons/gpwebcam.svg`. Commit both files.
 - With [mise](https://mise.jdx.dev), `mise install` in the repository installs both. If your shell does not activate mise, prefix commands with `mise exec --`, e.g. `mise exec -- go test ./...`. CI uses the same `mise.toml`.
 - For trying it with a camera: the v4l2loopback module and a GoPro; see the README.
 
@@ -16,7 +17,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 |---|---|
 | `cmd/gpwebcam` | The command line: `run`, `start`, `config`, `doctor`, `list`, `version`; the session loop, the watchdog, the ffmpeg log filter, camera on demand (`demand.go`), restart through systemd's D-Bus API (`systemd.go`), recording (`recording.go`), the control API on a Unix socket for `gpwebcam record` (`control.go`, `recordcmd.go`), the file manager over D-Bus (`filemanager.go`), and the live settings (the file, flags on top, a watcher that applies changes while `run` keeps going). |
 | `internal/settings` | The settings that the tray menu and `gpwebcam config` change, with their checks, saved as JSON in `~/.config/gpwebcam/settings.json`. |
-| `internal/tray` | The tray icon and its menu through `github.com/darkodemic/systray` (StatusNotifierItem over D-Bus), and the icons, drawn in code. |
+| `internal/tray` | The tray icon and its menu through `github.com/darkodemic/systray` (StatusNotifierItem over D-Bus). The icon is the application icon from `icon.png`, with a dot for the state and one for a recording, drawn in code. |
 | `internal/usbnet` | Finds GoPro network interfaces by USB vendor ID `2672` in sysfs and waits for their IPv4 address. |
 | `internal/camera` | Open GoPro HTTP client: webcam start, stop, status, keep-alive. |
 | `internal/stream` | Receives the camera's MPEG-TS datagrams over UDP, watches that they keep coming, and runs ffmpeg, which decodes them from one pipe and hands raw frames back over another. |
@@ -25,7 +26,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format, finds it by label, and follows v4l2loopback's client usage event, which says whether an application streams from the device. |
-| `packaging/` | Files the packages install: systemd user unit, module configuration, man page, Debian copyright, post-install message. |
+| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon), man page, Debian copyright, post-install message. |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
 | `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results. |
 
@@ -71,11 +72,11 @@ ar p dist/gpwebcam_*_amd64.deb control.tar.gz | tar -xzO ./control      # Debian
 bsdtar -tvf dist/gpwebcam-*.x86_64.rpm                                  # RPM
 ```
 
-The linters are clean apart from known, accepted findings: lintian `initial-upload-closes-no-bugs` (only for uploads to the Debian archive), rpmlint `statically-linked-binary` and namcap's RELRO and PIE warnings (the binary is static on purpose), and namcap's "owned by 0:0" (nFPM leaves owner names empty; pacman installs as root). Snapshot builds also get rpmlint `incoherent-version-in-changelog`, because the changelog names the next release.
+The linters are clean apart from known, accepted findings: lintian `initial-upload-closes-no-bugs` (only for uploads to the Debian archive), rpmlint `statically-linked-binary` and `position-independent-executable-suggested` and namcap's RELRO and PIE warnings (the binary is static on purpose), namcap's "Dependency included, but may not be needed ('ffmpeg')" (gpwebcam runs ffmpeg as a program, which namcap cannot see), and namcap's "owned by 0:0" (nFPM leaves owner names empty; pacman installs as root). Snapshot builds also get rpmlint `incoherent-version-in-changelog`, because the changelog names the next release.
 
 The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decisions/packaging-and-release.md`):
 
-- Files go only under `/usr`: `/usr/bin`, `/usr/lib/systemd/user`, `/usr/lib/modules-load.d`, `/usr/lib/modprobe.d`, `/usr/share/applications` (the **GoPro Webcam** menu entry, `packaging/desktop/gpwebcam.desktop`; check it with `desktop-file-validate`), `/usr/share/doc`, `/usr/share/licenses`. Nothing goes into `/etc` or a home directory.
+- Files go only under `/usr`: `/usr/bin`, `/usr/lib/systemd/user`, `/usr/lib/modules-load.d`, `/usr/lib/modprobe.d`, `/usr/share/applications` (the **GoPro Webcam** menu entry, `packaging/desktop/gpwebcam.desktop`; check it with `desktop-file-validate`), `/usr/share/icons/hicolor/scalable/apps` (the application icon, `packaging/icons/gpwebcam.svg`), `/usr/share/doc`, `/usr/share/licenses`. Nothing goes into `/etc` or a home directory.
 - The package never enables or starts the user service, and never loads the kernel module; the post-install script only prints instructions.
 
 ## CI and releases
@@ -87,7 +88,7 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 
 To release:
 
-1. Add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the RPM `%changelog`), and write the release notes in a plan, as `docs/plans-and-decisions/release-0.2.0.md` §4 does.
+1. Add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the RPM `%changelog`), and write the release notes in a plan, as `docs/plans-and-decisions/release-0.3.0.md` §4 does. The plan and the other documents are written for the release before the tag and do not name the release commit, since the tag records it; nothing needs a documentation change after the release.
 2. Make sure `main` is green, then tag and push:
 
    ```sh

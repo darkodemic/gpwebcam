@@ -40,7 +40,7 @@ Collected from `release-0.1.0.md` §4 and the later plans:
 - A second device "GoPro 2" for two applications at once.
 - RTSP for networks with a firewall.
 - Several cameras at once.
-- Darko's own icon, as an SVG, for the tray and the launcher.
+- Darko's own icon, as an SVG, for the tray and the launcher. Done 2026-10-08 and released in 0.3.0 (`tray-and-recording.md` §10, `release-0.3.0.md`).
 
 ## 4. Release notes, draft
 
