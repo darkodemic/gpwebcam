@@ -110,7 +110,7 @@ It checks ffmpeg, the module and the device, the service, the settings, the came
 
 ### Tray icon
 
-While the service runs, a camera icon in the system tray shows the state: white while video flows, orange when the camera has a problem, and faded while there is no video for another reason, such as no camera connected or the camera starting. A red dot means it records. Its menu has:
+While the service runs, the gpwebcam icon in the system tray shows the state with a dot at its bottom right: green while the camera's video flows, blue while the camera starts or waits for an application, gray when the camera is off in gpwebcam, orange when the camera has a problem, and no dot when no camera is connected. A red dot at the top right means it records. The first line of the menu and the tooltip say the same in words. Its menu has:
 
 - the camera's state, for example "GoPro HERO13 Black: 1080p, linear";
 - **Record**, or **Stop recording** with the time so far, and **Open recordings folder** (see [Recording](#recording));
@@ -276,6 +276,7 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 | `not enough free space to record` | Free some space; a recording needs 1 GB to start. |
 | `gpwebcam run is not running` from `gpwebcam record` | Start the service: `systemctl --user start gpwebcam`. |
 | No tray icon | The desktop has no system tray (GNOME needs the AppIndicator extension), or the icon was hidden: `gpwebcam config tray on`. `gpwebcam doctor` checks both. |
+| **GoPro Webcam** in the application menu, or its notifications, show a generic icon | The panel or launcher was already running when the package was installed and still remembers the icon theme without the gpwebcam icon. Restart it, or log out and in again. |
 | `settings file not used` or `settings file changed but cannot be used` | The settings file has an unknown setting or value; the log says which. gpwebcam keeps the defaults or the last good settings. Fix it with `gpwebcam config`, or delete the file. |
 | An application reports the camera as busy | Another application has the camera open. Like any V4L2 camera, it can be used by one application at a time; close it in the other application first. |
 

@@ -2,140 +2,144 @@ package tray
 
 import (
 	"bytes"
+	_ "embed"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
+	"sync"
 )
+
+// icon.png is the application icon at iconSize, rendered from the SVG
+// that the packages install; regenerate it after changing the SVG. The
+// render is 72x72 cropped to the middle 64x64, so the camera body fills
+// the width of a tray slot instead of leaving the SVG's margins empty.
+//
+//go:generate rsvg-convert -w 72 -h 72 --page-width 64 --page-height 64 --left=-4 --top=-4 -o icon.png ../../packaging/icons/gpwebcam.svg
+//go:embed icon.png
+var iconPNG []byte
 
 // State is what the icon shows.
 type State int
 
 const (
-	Off     State = iota // no video: no camera, or the camera is starting
-	Live                 // video is flowing
-	Trouble              // the camera is connected but does not work
+	NoCamera State = iota // no camera is connected
+	Starting              // a camera is connected and is being started
+	Ready                 // camera mode demand: the camera waits for an application
+	Paused                // camera mode off
+	Live                  // video is flowing
+	Trouble               // the camera is connected but does not work
 )
 
 // iconSize is the edge of the icon in pixels; panels scale it down.
 const iconSize = 64
 
-// subsamples per pixel edge; 4x4 samples smooth the edges.
+// subsamples per pixel edge; 4x4 samples smooth the edges of the dots.
 const subsamples = 4
 
 var (
-	white  = color.NRGBA{0xff, 0xff, 0xff, 0xff}
+	green  = color.NRGBA{0x3e, 0xc4, 0x6d, 0xff}
+	blue   = color.NRGBA{0x3d, 0x8b, 0xfd, 0xff}
+	gray   = color.NRGBA{0x9e, 0x9e, 0x9e, 0xff}
 	orange = color.NRGBA{0xf2, 0xa3, 0x3a, 0xff}
-	// outline keeps the white body visible on a light panel; on a dark
-	// one it hardly shows.
-	outline   = color.NRGBA{0x00, 0x00, 0x00, 0x60}
-	dark      = color.NRGBA{0x1d, 0x20, 0x26, 0xff}
-	lensInner = color.NRGBA{0x5f, 0x66, 0x70, 0xff}
-	shine     = color.NRGBA{0xc8, 0xcc, 0xd2, 0xff}
+	red    = color.NRGBA{0xe5, 0x39, 0x35, 0xff}
+	// rim keeps a dot visible on a light panel; on a dark one it hardly
+	// shows.
+	rim = color.NRGBA{0x00, 0x00, 0x00, 0x60}
 )
 
-// bodyColors and opacity per state: white while video flows, orange on a
-// problem, faded white otherwise.
-var (
-	bodyColors = map[State]color.NRGBA{Off: white, Live: white, Trouble: orange}
-	opacity    = map[State]float64{Off: 0.45, Live: 1, Trouble: 1}
-)
-
-// shape is one filled area of the icon, in a 64x64 coordinate space.
-type shape struct {
-	inside func(x, y float64) bool
-	color  color.NRGBA
+// stateDots is the color of the state dot; a state without one, such as
+// NoCamera, shows the bare icon.
+var stateDots = map[State]color.NRGBA{
+	Starting: blue,
+	Ready:    blue,
+	Paused:   gray,
+	Live:     green,
+	Trouble:  orange,
 }
 
-func roundRect(x0, y0, x1, y1, r float64) func(x, y float64) bool {
-	return func(x, y float64) bool {
-		if x < x0 || x > x1 || y < y0 || y > y1 {
-			return false
-		}
-		dx := max(x0+r-x, 0, x-(x1-r))
-		dy := max(y0+r-y, 0, y-(y1-r))
-		return dx*dx+dy*dy <= r*r
+// Where the dots sit, in the 64x64 icon: the state dot over the cooling
+// ribs at the bottom right, the recording dot on the lens cover's top
+// right corner.
+const (
+	stateX, stateY     = 53, 51
+	recordX, recordY   = 53, 11
+	dotRadius, rimSize = 9, 2
+)
+
+// logo decodes the embedded application icon once.
+var logo = sync.OnceValue(func() *image.NRGBA {
+	src, err := png.Decode(bytes.NewReader(iconPNG))
+	if err != nil {
+		panic("tray: embedded icon.png: " + err.Error())
 	}
+	img := image.NewNRGBA(src.Bounds())
+	draw.Draw(img, img.Bounds(), src, src.Bounds().Min, draw.Src)
+	return img
+})
+
+// Icon draws the icon for a state as PNG: the application icon with a
+// dot for the state at the bottom right (green live, blue starting or
+// waiting for an application, gray paused, orange a problem, none without
+// a camera) and a red dot at the top right while recording.
+func Icon(st State, recording bool) []byte {
+	img := image.NewNRGBA(logo().Bounds())
+	copy(img.Pix, logo().Pix)
+	if c, ok := stateDots[st]; ok {
+		dot(img, stateX, stateY, c)
+	}
+	if recording {
+		dot(img, recordX, recordY, red)
+	}
+	var buf bytes.Buffer
+	// Encoding an in-memory NRGBA image cannot fail.
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+// dot paints a filled circle with a dark rim around it.
+func dot(img *image.NRGBA, cx, cy float64, c color.NRGBA) {
+	paint(img, circle(cx, cy, dotRadius+rimSize), rim)
+	paint(img, circle(cx, cy, dotRadius), c)
 }
 
 func circle(cx, cy, r float64) func(x, y float64) bool {
 	return func(x, y float64) bool { return (x-cx)*(x-cx)+(y-cy)*(y-cy) <= r*r }
 }
 
-// rgba is a premultiplied color with float channels, for compositing.
-type rgba struct{ r, g, b, a float64 }
-
-// over paints c over dst.
-func over(dst rgba, c color.NRGBA) rgba {
-	a := float64(c.A) / 255
-	return rgba{
-		r: float64(c.R)/255*a + dst.r*(1-a),
-		g: float64(c.G)/255*a + dst.g*(1-a),
-		b: float64(c.B)/255*a + dst.b*(1-a),
-		a: a + dst.a*(1-a),
-	}
-}
-
-// red marks a recording, in the icon's top right corner.
-var red = color.NRGBA{0xe5, 0x39, 0x35, 0xff}
-
-// Icon draws the icon for a state as PNG: a camera body with a dark lens,
-// and a red dot while recording.
-func Icon(st State, recording bool) []byte {
-	body, ok := bodyColors[st]
-	if !ok {
-		st, body = Off, bodyColors[Off]
-	}
-	// Painted in order, later shapes over earlier ones.
-	shapes := []shape{
-		{roundRect(2, 10, 62, 54, 11), outline},
-		{roundRect(4, 12, 60, 52, 9), body},
-		{roundRect(10, 17, 20, 24, 2), dark},
-		{circle(36, 32, 14), dark},
-		{circle(36, 32, 7), lensInner},
-		{circle(39, 29, 2.5), shine},
-	}
-	if recording {
-		shapes = append(shapes,
-			shape{circle(52, 12, 11), outline},
-			shape{circle(52, 12, 9), red},
-		)
-	}
-	fade := opacity[st]
-	if recording {
-		fade = 1 // a recording is never faded
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, iconSize, iconSize))
+// paint lays c over img where inside is true, weighting each pixel by how
+// many of its subsamples are inside.
+func paint(img *image.NRGBA, inside func(x, y float64) bool, c color.NRGBA) {
 	const n = subsamples * subsamples
-	for py := 0; py < iconSize; py++ {
-		for px := 0; px < iconSize; px++ {
-			var sum rgba
+	b := img.Bounds()
+	for py := b.Min.Y; py < b.Max.Y; py++ {
+		for px := b.Min.X; px < b.Max.X; px++ {
+			hits := 0
 			for sy := 0; sy < subsamples; sy++ {
 				for sx := 0; sx < subsamples; sx++ {
 					x := float64(px) + (float64(sx)+0.5)/subsamples
 					y := float64(py) + (float64(sy)+0.5)/subsamples
-					var c rgba
-					for _, s := range shapes {
-						if s.inside(x, y) {
-							c = over(c, s.color)
-						}
+					if inside(x, y) {
+						hits++
 					}
-					sum.r, sum.g, sum.b, sum.a = sum.r+c.r, sum.g+c.g, sum.b+c.b, sum.a+c.a
 				}
 			}
-			if sum.a == 0 {
-				continue
+			if hits > 0 {
+				img.SetNRGBA(px, py, over(img.NRGBAAt(px, py), c, float64(hits)/n))
 			}
-			// Back from premultiplied to straight alpha.
-			img.SetNRGBA(px, py, color.NRGBA{
-				R: uint8(sum.r/sum.a*255 + 0.5),
-				G: uint8(sum.g/sum.a*255 + 0.5),
-				B: uint8(sum.b/sum.a*255 + 0.5),
-				A: uint8(sum.a/n*fade*255 + 0.5),
-			})
 		}
 	}
-	var buf bytes.Buffer
-	// Encoding an in-memory NRGBA image cannot fail.
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
+}
+
+// over paints c, with its opacity scaled by coverage, over dst; both are
+// straight (not premultiplied) alpha.
+func over(dst, c color.NRGBA, coverage float64) color.NRGBA {
+	sa := float64(c.A) / 255 * coverage
+	da := float64(dst.A) / 255 * (1 - sa)
+	a := sa + da
+	if a == 0 {
+		return color.NRGBA{}
+	}
+	mix := func(s, d uint8) uint8 { return uint8((float64(s)*sa+float64(d)*da)/a + 0.5) }
+	return color.NRGBA{mix(c.R, dst.R), mix(c.G, dst.G), mix(c.B, dst.B), uint8(a*255 + 0.5)}
 }

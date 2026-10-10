@@ -10,6 +10,7 @@ import (
 	"github.com/darkodemic/gpwebcam/internal/camera"
 	"github.com/darkodemic/gpwebcam/internal/placeholder"
 	"github.com/darkodemic/gpwebcam/internal/settings"
+	"github.com/darkodemic/gpwebcam/internal/tray"
 	"github.com/darkodemic/gpwebcam/internal/usbnet"
 	"github.com/darkodemic/gpwebcam/internal/v4l2"
 )
@@ -101,10 +102,10 @@ func (s *server) idle(parent context.Context, iface usbnet.Interface) error {
 		if mode := s.live.Get().Camera; mode != shown {
 			shown = mode
 			if mode == settings.CameraOff {
-				s.showCalm(ctx, placeholder.Paused, "Camera off")
+				s.showCalm(ctx, placeholder.Paused, tray.Paused, "Camera off")
 			} else {
 				model := modelName(iface)
-				s.showCalm(ctx, placeholder.Ready(model), model+": ready, starts when an application uses it")
+				s.showCalm(ctx, placeholder.Ready(model), tray.Ready, model+": ready, starts when an application uses it")
 			}
 		}
 		s.maybeResize(ctx)
