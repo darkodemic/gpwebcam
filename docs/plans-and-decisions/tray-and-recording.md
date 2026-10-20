@@ -220,6 +220,7 @@ With every slice: README, man page, `doctor` (tray host, recordings folder), and
 - 2026-10-08: Darko's application icon in the tray, the launcher and notifications (§10).
 - 2026-10-09: the tray icon larger, always in color, with a dot per state (§10).
 - 2026-10-10: the icon goes into release 0.3.0 (`release-0.3.0.md`).
+- 2026-10-20: the outline icon kept in the repository, not installed (§10, 2026-10-08).
 - Next: `release-0.3.0.md` §3.
 
 ## 10. Amendments
@@ -235,7 +236,7 @@ The fork is renamed from `fyne.io/systray` to `github.com/darkodemic/systray` (f
 
 ### 2026-10-08: Darko's application icon
 
-Darko drew the application icon (`media/gpwebcam-logo.svg` in his checkout, 256x256, a charcoal action camera with a teal display, fully vector) and asked to try it in the tray first; his monochrome outline icon stays in reserve, in case the logo does not work on some panel.
+Darko drew the application icon (256x256, a charcoal action camera with a teal display, fully vector) and asked to try it in the tray first; his monochrome outline icon stays in reserve, in case the logo does not work on some panel. Since 2026-10-20 the outline icon is `packaging/icons/gpwebcam-outline.svg`, with the same neutral metadata, and the packages do not install it.
 
 - `packaging/icons/gpwebcam.svg` is the logo with neutral metadata (`<title>gpwebcam</title>`, no brand names in the description and comments; the drawing is unchanged). The packages install it as `/usr/share/icons/hicolor/scalable/apps/gpwebcam.svg`; the menu entry has `Icon=gpwebcam` and notifications `--icon=gpwebcam`, instead of `camera-web` from the theme.
 - The packages depend on `hicolor-icon-theme` (`packaging-and-release.md` §3); namcap reported its absence as an error. With it, namcap, lintian and rpmlint report only the known findings from CONTRIBUTING (2026-10-08).
