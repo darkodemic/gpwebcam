@@ -7,7 +7,7 @@
 
 ## 1. Scope
 
-Two packages on the AUR, maintained by Darko (AUR user `darko`):
+Two packages on the AUR, maintained by Darko:
 
 | Package | Built from | Binary |
 |---|---|---|
@@ -24,7 +24,7 @@ Both install the same files as the Arch package on the GitHub release, conflict 
 | GoReleaser 2.18.2 (from `mise.toml`) publishes binary packages (`aurs`) and source packages (`aur_sources`, since v2.5); both push with `private_key`, which must not have a passphrase; the default SSH command uses `StrictHostKeyChecking=accept-new` | goreleaser.com, `aurs` and `aur_sources`, 2026-10-20 |
 | `aur_sources` needs GoReleaser's source archive (`source.enabled`), and its PKGBUILD downloads it from the release | snapshot build, 2026-10-20 |
 | `aurs` and `aur_sources` have no `check()` and no `options`; makepkg's default `debug` option therefore also builds a `-debug` package | GoReleaser output, Arch container, 2026-10-20 |
-| The key: an Ed25519 key that Darko created in 1Password only for the AUR; its public half is in his AUR account; the private half is the secret `AUR_KEY` of the GitHub environment "Arch Linux User Repository", which allows only tags `v*`; the repository has no other secrets | Darko and the GitHub API, 2026-10-20 |
+| The key: an SSH key used only for the AUR, without a passphrase; its public half is in the maintainer's AUR account, the private half is the secret `AUR_KEY` of the GitHub environment "Arch Linux User Repository", which allows only tags `v*`; the repository has no other secrets | Darko and the GitHub API, 2026-10-20 |
 | GoReleaser pushes to the AUR during `goreleaser release`, while the GitHub release is still a draft (`release.draft: true`); a draft's assets cannot be downloaded publicly | `.goreleaser.yaml`; GitHub drafts |
 
 ## 3. Configuration
@@ -65,6 +65,6 @@ Decision, Darko, 2026-10-20: **B**. In GoReleaser `release.draft: false`, `prere
 
 ## 7. Where we are and what is next
 
-- 2026-10-20: Darko created the AUR key and the environment. Configuration and the container test (§3, §4) in the worktree `.worktrees/aur`.
+- 2026-10-20: the AUR key and the environment set up. Configuration and the container test (§3, §4) in the worktree `.worktrees/aur`.
 - 2026-10-20: Darko chose B (§5) and release 0.3.1 (§6). The release workflow, CONTRIBUTING, the README (Arch users install from the AUR), `packaging-and-release.md` §6 and `release-0.3.1.md` updated in the same worktree.
 - Next: `release-0.3.1.md` §2.

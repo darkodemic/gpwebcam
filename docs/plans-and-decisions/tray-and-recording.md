@@ -246,7 +246,7 @@ Darko drew the application icon (256x256, a charcoal action camera with a teal d
 
 ### 2026-10-09: a larger logo, always in color, a dot per state
 
-Darko tried the first version on his panel: the tray slot (22 px, set by his Quickshell bar for every tray icon) looked small, and the gray, faded icon read as a pale square. The menu entry showed a generic gear, because the bar had been running since before the icon was installed: the icon was in `/usr/share/icons/hicolor/icon-theme.cache` and a new process found it (GTK lookup), but Qt in the running bar kept its earlier view of the theme and fell back to `application-x-executable`, a gear in Papirus. Restarting the bar is the fix; nothing in the package.
+Darko tried the first version on the test machine: in a 22 px tray slot the icon looked small, and the gray, faded icon read as a pale square. The menu entry showed a generic icon, because the panel had been running since before the icon was installed: the icon was in `/usr/share/icons/hicolor/icon-theme.cache` and a new process found it (GTK lookup), but Qt in the running panel kept its earlier view of the icon theme and fell back to `application-x-executable`. Restarting the panel is the fix; nothing in the package.
 
 - The tray render is 72x72 cropped to the middle 64x64 (`rsvg-convert --page-width 64 --page-height 64 --left=-4 --top=-4`), so the body fills the slot's width: 62 px instead of 55 px of 64, about 12 % larger. The soft shadow under the body is cut at the edges, where it is invisible anyway.
 - The logo is always in color. The state is a dot at the bottom right, over the cooling ribs, chosen by Darko from the proposal on 2026-10-09:

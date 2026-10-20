@@ -83,7 +83,7 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 ## CI and releases
 
 - `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as the workflow artifact `packages`, together with the AUR PKGBUILDs in `aur/`.
-- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages, publishes the GitHub release with them, the archives, the source archive, `checksums.txt` and the notes from `docs/release-notes/<version>.md`, and pushes `gpwebcam` and `gpwebcam-bin` to the AUR. The job runs in the environment "Arch Linux User Repository", whose secret `AUR_KEY` is the SSH key of the AUR account `darko` and which only tags `v*` can use. A tag with a suffix, such as `v0.4.0-rc1`, becomes a prerelease and is not pushed to the AUR.
+- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages, publishes the GitHub release with them, the archives, the source archive, `checksums.txt` and the notes from `docs/release-notes/<version>.md`, and pushes `gpwebcam` and `gpwebcam-bin` to the AUR. The job runs in the environment "Arch Linux User Repository", whose secret `AUR_KEY` is an SSH key of the maintainer's AUR account, used for nothing else, and which only tags `v*` can use. A tag with a suffix, such as `v0.4.0-rc1`, becomes a prerelease and is not pushed to the AUR.
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 

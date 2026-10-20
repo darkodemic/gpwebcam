@@ -58,6 +58,6 @@ Install and setup: see [README.md](https://github.com/darkodemic/gpwebcam/blob/v
 ## 5. Where we are and what is next
 
 - 2026-10-08 and 2026-10-09: the icon (`tray-and-recording.md` §10). namcap, lintian and rpmlint report only the known findings from CONTRIBUTING; the packaging has not changed since, only the binary.
-- 2026-10-09: Darko installed the Arch package with the larger icon and the state dots on the test machine and restarted his bar: "super je sad".
+- 2026-10-09: the Arch package with the larger icon and the state dots, tried on the test machine with the camera; Darko accepted it.
 - 2026-10-10: Darko decided to release it. R1 to R3 written. R4: installs simulated on the snapshot packages with `apt-get install -s` (Debian 13, Ubuntu 24.04) and `dnf install --assumeno` (Fedora 44): the dependencies resolve, on Fedora with `hicolor-icon-theme` 0.18 and `ffmpeg-free` 8.1.3.
 - Next: R5, then the list in §3.
