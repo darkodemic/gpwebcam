@@ -2,7 +2,8 @@
 # pushed, with the Go and GoReleaser versions from mise.toml. GoReleaser
 # publishes the GitHub release with the packages, archives, checksums and
 # the notes from docs/release-notes/<version>.md, then pushes gpwebcam and
-# gpwebcam-bin to the AUR with the key from the environment's AUR_KEY.
+# gpwebcam-bin to the AUR with the key from the environment's AUR_KEY, and
+# gpwebcam-git when its recipe changed.
 name: Release
 
 on:
@@ -30,6 +31,28 @@ jobs:
       - run: goreleaser release --clean --release-notes "$NOTES"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+      # gpwebcam-git builds the newest commit by itself, so its recipe goes
+      # to the AUR only when it changed. Prereleases skip it, like the
+      # other AUR packages.
+      - name: Update gpwebcam-git on the AUR
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: |
+          key=$(mktemp)
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$AUR_KEY" > "$key"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -F /dev/null"
+          dir=$(mktemp -d)
+          git clone ssh://aur@aur.archlinux.org/gpwebcam-git.git "$dir"
+          cp packaging/aur/gpwebcam-git/PKGBUILD packaging/aur/gpwebcam-git/.SRCINFO packaging/aur/gpwebcam.install "$dir"/
+          git -C "$dir" add PKGBUILD .SRCINFO gpwebcam.install
+          if git -C "$dir" diff --cached --quiet; then
+            echo "gpwebcam-git on the AUR is up to date"
+          else
+            git -C "$dir" -c user.name="Darko Demić" -c user.email="mail@darkodemic.com" commit -m "Update the PKGBUILD ($GITHUB_REF_NAME)"
+            git -C "$dir" push origin HEAD:master
+          fi
+        env:
           AUR_KEY: ${{ secrets.AUR_KEY }}
       # GoReleaser published empty notes once without saying so.
       - name: Check the published notes

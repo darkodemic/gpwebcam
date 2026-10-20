@@ -29,7 +29,7 @@ sudo pacman -S --needed v4l2loopback-dkms linux-headers
 yay -S gpwebcam-bin
 ```
 
-- `gpwebcam-bin` installs the release binary; `gpwebcam` builds it from source. Use either, with `yay`, `paru` or another AUR helper.
+- `gpwebcam-bin` installs the release binary; `gpwebcam` builds it from source; `gpwebcam-git` builds the newest commit on `main`, for testing what is not released yet. Use one of them, with `yay`, `paru` or another AUR helper.
 - `v4l2loopback-dkms` builds the module for your kernel; `linux-headers` must match the kernel you run (use `linux-lts-headers` for `linux-lts`).
 - The Arch package on the releases page installs with `sudo pacman -U gpwebcam-<version>-x86_64.pkg.tar.zst`, but does not update itself.
 
