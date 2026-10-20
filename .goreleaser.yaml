@@ -273,10 +273,9 @@ aur_sources:
       install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/gpwebcam/LICENSE"
 
 # The release notes are written by hand in docs/release-notes/ and passed
-# with --release-notes (see CONTRIBUTING.md); a list of commits sorted by
-# title said little.
-changelog:
-  disable: true
+# with --release-notes (see CONTRIBUTING.md). GoReleaser reads that file in
+# its changelog step, so the step stays enabled: changelog.disable skips it
+# and the release gets empty notes, as 0.3.1 did.
 
 # Published at once, not as a draft: the AUR packages above download from
 # the release, so it has to be public when they are pushed.

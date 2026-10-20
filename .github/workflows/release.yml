@@ -31,3 +31,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
+      # GoReleaser published empty notes once without saying so.
+      - name: Check the published notes
+        run: |
+          body=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
+          test -n "${body//[[:space:]]/}" || { echo "::error::the release has no notes; add them with gh release edit --notes-file $NOTES"; exit 1; }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

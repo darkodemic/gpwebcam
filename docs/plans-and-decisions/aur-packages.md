@@ -67,4 +67,6 @@ Decision, Darko, 2026-10-20: **B**. In GoReleaser `release.draft: false`, `prere
 
 - 2026-10-20: the AUR key and the environment set up. Configuration and the container test (§3, §4) in the worktree `.worktrees/aur`.
 - 2026-10-20: Darko chose B (§5) and release 0.3.1 (§6). The release workflow, CONTRIBUTING, the README (Arch users install from the AUR), `packaging-and-release.md` §6 and `release-0.3.1.md` updated in the same worktree.
-- Next: `release-0.3.1.md` §2.
+- 2026-10-20, release 0.3.1: the workflow published the release and pushed both packages; the AUR shows `gpwebcam` and `gpwebcam-bin` 0.3.1-1. Both PKGBUILDs, cloned from the AUR, build in an Arch container from the public release files (checksums pass); `gpwebcam-bin` installs the static binary, `gpwebcam` a PIE build, both report `gpwebcam 0.3.1`. The AUR RPC answered "no results" for some minutes after the first push, while the package pages already existed.
+- 2026-10-20: the release had empty notes. GoReleaser reads the `--release-notes` file in its changelog step, and `changelog.disable: true`, kept from 0.2.0, skipped that step; a snapshot build skips it too, so the test before the tag could not show it (GoReleaser 2.18.2, `internal/pipe/changelog`). The notes were put on the release by hand with `gh release edit`. Fix: the changelog step is enabled again, and the workflow fails when the published release has no notes.
+- Next: Darko installs `gpwebcam-bin` from the AUR on the test machine (`release-0.3.1.md` R6).

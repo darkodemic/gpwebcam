@@ -45,4 +45,5 @@ In `docs/release-notes/0.3.1.md`, published by the workflow as they are.
 ## 5. Where we are and what is next
 
 - 2026-10-20: Darko chose option B (no draft) and a release 0.3.1 for the first AUR version (`aur-packages.md` §5, §6). R2 and R3 written; the configuration tested in an Arch container (`aur-packages.md` §4).
-- Next: R1, R4, R5, R6, then the list in §3.
+- 2026-10-20: R1 to R5 done; the signed tag `v0.3.1` pushed, the workflow published the release in 82 s and pushed both AUR packages. Its files match `checksums.txt`, the binary reports `gpwebcam 0.3.1`, and both packages build from the AUR (`aur-packages.md` §7). The notes came out empty and were added by hand; the cause and the fix are in `aur-packages.md` §7.
+- Next: R6 on the test machine, then the list in §3.
