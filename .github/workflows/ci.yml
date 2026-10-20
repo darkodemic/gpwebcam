@@ -1,6 +1,7 @@
 # Checks every push to main and every pull request: formatting, vet and
 # tests on the oldest supported Go (go.mod) and on the Go from mise.toml,
-# then a snapshot build of all packages with the tools from mise.toml.
+# then a snapshot build of all packages with the tools from mise.toml,
+# and a build of the gpwebcam-git PKGBUILD in Arch Linux.
 # Actions are pinned to commits.
 name: CI
 
@@ -56,3 +57,13 @@ jobs:
             dist/*.tar.gz
             dist/checksums.txt
             dist/aur/
+
+  aur-git:
+    name: Build gpwebcam-git
+    runs-on: ubuntu-24.04
+    steps:
+      # pkgver() needs the tags, and makepkg clones this checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: docker run --rm -v "$PWD:/repo:ro" archlinux:latest /repo/packaging/aur/check-gpwebcam-git.sh "$(git rev-parse HEAD)"

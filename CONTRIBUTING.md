@@ -26,7 +26,7 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format, finds it by label, and follows v4l2loopback's client usage event, which says whether an application streams from the device. |
-| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon; `icons/gpwebcam-outline.svg` is a monochrome outline icon kept in reserve and not installed), man page, Debian copyright, post-install message, and the AUR install script (`aur/gpwebcam.install`). |
+| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon; `icons/gpwebcam-outline.svg` is a monochrome outline icon kept in reserve and not installed), man page, Debian copyright, post-install message, the AUR install script (`aur/gpwebcam.install`), the `gpwebcam-git` PKGBUILD (`aur/gpwebcam-git/`) and the script that checks it (`aur/check-gpwebcam-git.sh`). |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
 | `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results. |
 | `docs/release-notes/` | The notes of each release, `<version>.md`, which the release workflow publishes. |
@@ -82,8 +82,8 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 
 ## CI and releases
 
-- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as the workflow artifact `packages`, together with the AUR PKGBUILDs in `aur/`.
-- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages, publishes the GitHub release with them, the archives, the source archive, `checksums.txt` and the notes from `docs/release-notes/<version>.md`, and pushes `gpwebcam` and `gpwebcam-bin` to the AUR. The job runs in the environment "Arch Linux User Repository", whose secret `AUR_KEY` is an SSH key of the maintainer's AUR account, used for nothing else, and which only tags `v*` can use. A tag with a suffix, such as `v0.4.0-rc1`, becomes a prerelease and is not pushed to the AUR.
+- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as the workflow artifact `packages`, together with the AUR PKGBUILDs in `aur/`; and a build of the `gpwebcam-git` PKGBUILD in an `archlinux` container, from the commit under test.
+- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages, publishes the GitHub release with them, the archives, the source archive, `checksums.txt` and the notes from `docs/release-notes/<version>.md`, and pushes `gpwebcam` and `gpwebcam-bin` to the AUR, and `gpwebcam-git` when its PKGBUILD or install script changed. The job runs in the environment "Arch Linux User Repository", whose secret `AUR_KEY` is an SSH key of the maintainer's AUR account, used for nothing else, and which only tags `v*` can use. A tag with a suffix, such as `v0.4.0-rc1`, becomes a prerelease and is not pushed to the AUR.
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 
@@ -99,6 +99,13 @@ To release:
    ```
 
 4. Check the release page and the AUR pages of `gpwebcam` and `gpwebcam-bin`. If the AUR push failed, the GitHub release is already out: fix the cause, then run the release job again (`gh run rerun <run id>`), which rebuilds, replaces the release files and pushes to the AUR.
+
+### The AUR package gpwebcam-git
+
+`gpwebcam-git` builds the newest commit on `main` and finds its version at build time, so AUR helpers pick up new commits without any change on the AUR. Its PKGBUILD, `packaging/aur/gpwebcam-git/PKGBUILD`, changes only when the build does; its dependencies and installed files follow the AUR entries in `.goreleaser.yaml`.
+
+- After changing it, refresh `.SRCINFO` next to it with `makepkg --printsrcinfo > .SRCINFO` on Arch. CI builds the PKGBUILD from the commit under test with `packaging/aur/check-gpwebcam-git.sh` and fails if `.SRCINFO` does not match; the script's header shows how to run it locally.
+- The release workflow pushes the PKGBUILD, `.SRCINFO` and `packaging/aur/gpwebcam.install` to the AUR when they differ from what is there, so a change reaches the AUR with the next release.
 
 ## Rules for the code
 

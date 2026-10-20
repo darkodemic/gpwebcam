@@ -1,6 +1,6 @@
 # AUR packages
 
-- **Status:** Accepted 2026-10-20: `gpwebcam` and `gpwebcam-bin` through GoReleaser (§3); the release workflow publishes the release itself, without a draft, and pushes to the AUR in the same run (§5, option B); the first AUR version is release 0.3.1 (§6, `release-0.3.1.md`).
+- **Status:** Accepted 2026-10-20: `gpwebcam` and `gpwebcam-bin` through GoReleaser (§3); the release workflow publishes the release itself, without a draft, and pushes to the AUR in the same run (§5, option B); the first AUR version is release 0.3.1 (§6, `release-0.3.1.md`); `gpwebcam-git` since 2026-10-20, built in CI and pushed by the release workflow when its recipe changes (§8).
 - **Date:** 2026-10-20
 - **Owner:** Darko
 - **Related:** `packaging-and-release.md` §6 (channels), §3 (file layout); ADR 0005 (name and packages through GoReleaser); `release-0.3.0.md` §3; `release-0.3.1.md`
@@ -14,7 +14,7 @@ Two packages on the AUR, maintained by Darko:
 | `gpwebcam-bin` | the release archive `gpwebcam_<version>_linux_<arch>.tar.gz` | the static release binary, as in the other packages |
 | `gpwebcam` | GoReleaser's source archive `gpwebcam-<version>.tar.gz` from the release | built by makepkg with the Arch Go flags: PIE, external linking, `-trimpath`, `-mod=readonly` |
 
-Both install the same files as the Arch package on the GitHub release, conflict with each other and provide `gpwebcam`. A `-git` package is out of scope.
+Both install the same files as the Arch package on the GitHub release, conflict with each other and provide `gpwebcam`. A `-git` package was out of scope at first; since 2026-10-20 there is `gpwebcam-git` too (§8).
 
 ## 2. Facts
 
@@ -69,4 +69,18 @@ Decision, Darko, 2026-10-20: **B**. In GoReleaser `release.draft: false`, `prere
 - 2026-10-20: Darko chose B (§5) and release 0.3.1 (§6). The release workflow, CONTRIBUTING, the README (Arch users install from the AUR), `packaging-and-release.md` §6 and `release-0.3.1.md` updated in the same worktree.
 - 2026-10-20, release 0.3.1: the workflow published the release and pushed both packages; the AUR shows `gpwebcam` and `gpwebcam-bin` 0.3.1-1. Both PKGBUILDs, cloned from the AUR, build in an Arch container from the public release files (checksums pass); `gpwebcam-bin` installs the static binary, `gpwebcam` a PIE build, both report `gpwebcam 0.3.1`. The AUR RPC answered "no results" for some minutes after the first push, while the package pages already existed.
 - 2026-10-20: the release had empty notes. GoReleaser reads the `--release-notes` file in its changelog step, and `changelog.disable: true`, kept from 0.2.0, skipped that step; a snapshot build skips it too, so the test before the tag could not show it (GoReleaser 2.18.2, `internal/pipe/changelog`). The notes were put on the release by hand with `gh release edit`. Fix: the changelog step is enabled again, and the workflow fails when the published release has no notes.
-- Next: Darko installs `gpwebcam-bin` from the AUR on the test machine (`release-0.3.1.md` R6).
+- 2026-10-20: `gpwebcam-bin` installed from the AUR with `yay` on the test machine, replacing the earlier local package; after a restart the service runs 0.3.1 and the tray icon registers.
+- 2026-10-20: `gpwebcam-git` added (§8), and the Go module cache of the source build moved into the build directory.
+- Next: Darko's first push of `gpwebcam-git` (§8); the module cache fix reaches the AUR `gpwebcam` with the next release.
+
+## 8. gpwebcam-git
+
+Darko decided on 2026-10-20 to take the name now rather than when testers ask for it.
+
+- `packaging/aur/gpwebcam-git/PKGBUILD` builds the newest commit on `main` from a `git+https` clone of the GitHub repository, with the same flags, dependencies, install script and installed files as `gpwebcam`. The version comes from `git describe`: `0.3.1.r1.g513ae03` is one commit after `v0.3.1`. It provides `gpwebcam` and conflicts with `gpwebcam` and `gpwebcam-bin`.
+- The package finds its version at build time, and AUR helpers (`yay --devel`, `paru`) see new commits by asking the GitHub repository, so the AUR does not change with every commit; the AUR rules also ask not to push VCS packages only to bump the version. Darko asked on 2026-10-20 for a workflow that pushes every commit on `main`; it was dropped for these reasons and because the AUR key would then reach every workflow on `main`, not only tags.
+- GoReleaser does not make `-git` packages. Instead, the release workflow pushes `PKGBUILD`, `.SRCINFO` and `gpwebcam.install` to the AUR when they differ from what is there, and skips prereleases like GoReleaser does; the key stays with tags `v*`. `.SRCINFO` is kept next to the PKGBUILD and refreshed with `makepkg --printsrcinfo`.
+- CI builds the PKGBUILD on every push and pull request with `packaging/aur/check-gpwebcam-git.sh` in `archlinux:latest`: makepkg clones the commit under test instead of GitHub, `namcap` checks the PKGBUILD, and the job fails if `.SRCINFO` does not match it.
+- The first push, which takes the name, is Darko's, by hand with his own key, so the name does not wait for the next release.
+- Found while testing it: the published `gpwebcam` source build left the Go module cache in `~/go` of the user who built it, with 35 read-only directories that `rm -rf` cannot delete. Both source PKGBUILDs now set `GOPATH` to `${srcdir}/gopath` and use `-modcacherw`, so the cache stays in the build directory and `makepkg -c` removes it. For `gpwebcam` this is the GoReleaser configuration and reaches the AUR with the next release.
+- Tested 2026-10-20 in `archlinux:latest`: the published `gpwebcam` shows the module cache problem; the snapshot `gpwebcam` and `gpwebcam-git` build with `makepkg -fc` and leave no `~/go`; `namcap` reports nothing on the PKGBUILD and only "glibc implicitly satisfied" and the ffmpeg warning on the package; installing `gpwebcam-git` over `gpwebcam-bin` asks to remove it; the binary is PIE and reports `gpwebcam 0.3.1.r1.g513ae03`. The CI script passed locally against a clean clone at `513ae03`.
