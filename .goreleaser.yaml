@@ -37,6 +37,14 @@ archives:
       - packaging/modules-load.d/gpwebcam.conf
       - packaging/modprobe.d/99-gpwebcam.conf
       - packaging/man/gpwebcam.1
+      - packaging/desktop/gpwebcam.desktop
+      - packaging/icons/gpwebcam.svg
+
+# The source archive for the AUR source package; makepkg builds from it.
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}-{{ .Version }}"
+  prefix_template: "{{ .ProjectName }}-{{ .Version }}/"
 
 checksum:
   name_template: checksums.txt
@@ -185,13 +193,100 @@ nfpms:
     formats: [archlinux]
     description: Use a GoPro connected over USB as a Linux webcam
 
-# The release notes are written by hand (see CONTRIBUTING.md); a list of
-# commits sorted by title said little.
+# AUR: gpwebcam-bin from the release archives, gpwebcam built from the
+# tagged source. Both are pushed with the key in the AUR_KEY secret.
+aurs:
+  -
+    name: gpwebcam-bin
+    ids: [gpwebcam]
+    homepage: https://github.com/darkodemic/gpwebcam
+    description: Use a GoPro connected over USB as a Linux webcam
+    maintainers:
+      - "Darko Demić <mail at darkodemic dot com>"
+    license: Apache-2.0
+    private_key: '{{ envOrDefault "AUR_KEY" "" }}'
+    git_url: ssh://aur@aur.archlinux.org/gpwebcam-bin.git
+    skip_upload: auto
+    depends: [ffmpeg, hicolor-icon-theme]
+    optdepends:
+      - "v4l2loopback-dkms: the loopback device that applications read"
+      - "libnotify: desktop notifications"
+    install: packaging/aur/gpwebcam.install
+    commit_author:
+      name: Darko Demić
+      email: mail@darkodemic.com
+    # The same files as the Arch package above, from the release archive.
+    # The source package below installs them from the source tree; keep the
+    # two lists in step.
+    package: |-
+      install -Dm755 gpwebcam "${pkgdir}/usr/bin/gpwebcam"
+      install -Dm644 packaging/systemd/gpwebcam.service "${pkgdir}/usr/lib/systemd/user/gpwebcam.service"
+      install -Dm644 packaging/modules-load.d/gpwebcam.conf "${pkgdir}/usr/lib/modules-load.d/gpwebcam.conf"
+      install -Dm644 packaging/modprobe.d/99-gpwebcam.conf "${pkgdir}/usr/lib/modprobe.d/99-gpwebcam.conf"
+      install -Dm644 packaging/desktop/gpwebcam.desktop "${pkgdir}/usr/share/applications/gpwebcam.desktop"
+      install -Dm644 packaging/icons/gpwebcam.svg "${pkgdir}/usr/share/icons/hicolor/scalable/apps/gpwebcam.svg"
+      install -Dm644 packaging/man/gpwebcam.1 "${pkgdir}/usr/share/man/man1/gpwebcam.1"
+      install -Dm644 README.md "${pkgdir}/usr/share/doc/gpwebcam/README.md"
+      install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/gpwebcam/LICENSE"
+
+aur_sources:
+  - name: gpwebcam
+    homepage: https://github.com/darkodemic/gpwebcam
+    description: Use a GoPro connected over USB as a Linux webcam
+    maintainers:
+      - "Darko Demić <mail at darkodemic dot com>"
+    license: Apache-2.0
+    private_key: '{{ envOrDefault "AUR_KEY" "" }}'
+    git_url: ssh://aur@aur.archlinux.org/gpwebcam.git
+    skip_upload: auto
+    makedepends: [go]
+    conflicts: [gpwebcam-bin]
+    depends: [ffmpeg, hicolor-icon-theme]
+    optdepends:
+      - "v4l2loopback-dkms: the loopback device that applications read"
+      - "libnotify: desktop notifications"
+    install: packaging/aur/gpwebcam.install
+    commit_author:
+      name: Darko Demić
+      email: mail@darkodemic.com
+    prepare: |-
+      cd "${pkgname}-${pkgver}"
+      go mod download
+    build: |-
+      cd "${pkgname}-${pkgver}"
+      export CGO_CPPFLAGS="${CPPFLAGS}"
+      export CGO_CFLAGS="${CFLAGS}"
+      export CGO_CXXFLAGS="${CXXFLAGS}"
+      export CGO_LDFLAGS="${LDFLAGS}"
+      export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+      go build -ldflags "-linkmode=external -X main.version=${pkgver}" -o gpwebcam ./cmd/gpwebcam
+    package: |-
+      cd "${pkgname}-${pkgver}"
+      install -Dm755 gpwebcam "${pkgdir}/usr/bin/gpwebcam"
+      install -Dm644 packaging/systemd/gpwebcam.service "${pkgdir}/usr/lib/systemd/user/gpwebcam.service"
+      install -Dm644 packaging/modules-load.d/gpwebcam.conf "${pkgdir}/usr/lib/modules-load.d/gpwebcam.conf"
+      install -Dm644 packaging/modprobe.d/99-gpwebcam.conf "${pkgdir}/usr/lib/modprobe.d/99-gpwebcam.conf"
+      install -Dm644 packaging/desktop/gpwebcam.desktop "${pkgdir}/usr/share/applications/gpwebcam.desktop"
+      install -Dm644 packaging/icons/gpwebcam.svg "${pkgdir}/usr/share/icons/hicolor/scalable/apps/gpwebcam.svg"
+      install -Dm644 packaging/man/gpwebcam.1 "${pkgdir}/usr/share/man/man1/gpwebcam.1"
+      install -Dm644 README.md "${pkgdir}/usr/share/doc/gpwebcam/README.md"
+      install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/gpwebcam/LICENSE"
+
+# The release notes are written by hand in docs/release-notes/ and passed
+# with --release-notes (see CONTRIBUTING.md); a list of commits sorted by
+# title said little.
 changelog:
   disable: true
 
+# Published at once, not as a draft: the AUR packages above download from
+# the release, so it has to be public when they are pushed.
 release:
   github:
     owner: darkodemic
     name: gpwebcam
-  draft: true
+  draft: false
+  # A tag such as v0.4.0-rc1 is a prerelease; the AUR skips it too.
+  prerelease: auto
+  # Running the release workflow again for a tag, after a failed AUR push,
+  # replaces the files of the release it already published.
+  replace_existing_artifacts: true

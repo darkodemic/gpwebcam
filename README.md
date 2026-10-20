@@ -20,16 +20,18 @@ Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 1. Install the package
 
-Download the package for your distribution and architecture from the [releases page](https://github.com/darkodemic/gpwebcam/releases), then install it as below. To build it yourself, see [CONTRIBUTING.md](CONTRIBUTING.md).
+On Arch Linux, install it from the AUR. For other distributions, download the package for your distribution and architecture from the [releases page](https://github.com/darkodemic/gpwebcam/releases), then install it as below. To build it yourself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Arch Linux**
 
 ```sh
 sudo pacman -S --needed v4l2loopback-dkms linux-headers
-sudo pacman -U gpwebcam-<version>-x86_64.pkg.tar.zst
+yay -S gpwebcam-bin
 ```
 
+- `gpwebcam-bin` installs the release binary; `gpwebcam` builds it from source. Use either, with `yay`, `paru` or another AUR helper.
 - `v4l2loopback-dkms` builds the module for your kernel; `linux-headers` must match the kernel you run (use `linux-lts-headers` for `linux-lts`).
+- The Arch package on the releases page installs with `sudo pacman -U gpwebcam-<version>-x86_64.pkg.tar.zst`, but does not update itself.
 
 **Debian and Ubuntu** (not yet tried with a camera)
 

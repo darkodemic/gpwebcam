@@ -26,9 +26,10 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format, finds it by label, and follows v4l2loopback's client usage event, which says whether an application streams from the device. |
-| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon; `icons/gpwebcam-outline.svg` is a monochrome outline icon kept in reserve and not installed), man page, Debian copyright, post-install message. |
+| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon; `icons/gpwebcam-outline.svg` is a monochrome outline icon kept in reserve and not installed), man page, Debian copyright, post-install message, and the AUR install script (`aur/gpwebcam.install`). |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
 | `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results. |
+| `docs/release-notes/` | The notes of each release, `<version>.md`, which the release workflow publishes. |
 
 ## Build and test
 
@@ -81,27 +82,23 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 
 ## CI and releases
 
-- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as a workflow artifact.
-- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages and creates a **draft** GitHub release with them, the archives and `checksums.txt`. A maintainer checks the draft and publishes it.
+- `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as the workflow artifact `packages`, together with the AUR PKGBUILDs in `aur/`.
+- `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages, publishes the GitHub release with them, the archives, the source archive, `checksums.txt` and the notes from `docs/release-notes/<version>.md`, and pushes `gpwebcam` and `gpwebcam-bin` to the AUR. The job runs in the environment "Arch Linux User Repository", whose secret `AUR_KEY` is the SSH key of the AUR account `darko` and which only tags `v*` can use. A tag with a suffix, such as `v0.4.0-rc1`, becomes a prerelease and is not pushed to the AUR.
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 
 To release:
 
-1. Add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the RPM `%changelog`), and write the release notes in a plan, as `docs/plans-and-decisions/release-0.3.0.md` §4 does. The plan and the other documents are written for the release before the tag and do not name the release commit, since the tag records it; nothing needs a documentation change after the release.
-2. Make sure `main` is green, then tag and push:
+1. In a pull request: add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the RPM `%changelog`); write the release notes in `docs/release-notes/<version>.md`, which the release workflow publishes as they are and without which it stops; and write a release plan, as `docs/plans-and-decisions/release-0.3.1.md`. The documents are written for the release before the tag and do not name the release commit, since the tag records it; nothing needs a documentation change after the release.
+2. Check the packages in the pull request's `packages` artifact, including the PKGBUILDs in `aur/`. The release is published as soon as the tag is pushed, so this is the last look before it is public.
+3. Merge, make sure `main` is green, then tag and push:
 
    ```sh
-   git tag -s v0.2.0 -m "gpwebcam 0.2.0"
-   git push origin v0.2.0
+   git tag -s v0.3.1 -m "gpwebcam 0.3.1"
+   git push origin v0.3.1
    ```
 
-3. GoReleaser leaves the notes empty (`changelog.disable`). Put the notes on the draft, check it, and publish it:
-
-   ```sh
-   gh release edit v0.2.0 --notes-file notes.md
-   gh release edit v0.2.0 --draft=false
-   ```
+4. Check the release page and the AUR pages of `gpwebcam` and `gpwebcam-bin`. If the AUR push failed, the GitHub release is already out: fix the cause, then run the release job again (`gh run rerun <run id>`), which rebuilds, replaces the release files and pushes to the AUR.
 
 ## Rules for the code
 

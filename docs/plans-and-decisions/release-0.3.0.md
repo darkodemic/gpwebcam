@@ -29,7 +29,7 @@ The systemd unit did not change, so the upgrade needs only a restart of the serv
 
 The list from `release-0.2.0.md` §3, without the icon:
 
-- AUR: a source PKGBUILD and `gpwebcam-bin` (`packaging-and-release.md` §6).
+- AUR: a source PKGBUILD and `gpwebcam-bin` (`packaging-and-release.md` §6). In 0.3.1 (`release-0.3.1.md`, `aur-packages.md`).
 - COPR for Fedora; RPM Fusion.
 - A Debian ITP, which first needs `github.com/darkodemic/systray` as a Debian package and godbus v5.2.2 in Debian, or a build with 5.1.0 (`tray-and-recording.md` §10).
 - A second device "GoPro 2" for two applications at once.

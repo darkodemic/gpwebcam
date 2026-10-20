@@ -1,7 +1,8 @@
 # Builds and publishes a release when a version tag (v0.1.0, ...) is
 # pushed, with the Go and GoReleaser versions from mise.toml. GoReleaser
-# creates a draft GitHub release with the packages, archives and
-# checksums; a person reviews and publishes it.
+# publishes the GitHub release with the packages, archives, checksums and
+# the notes from docs/release-notes/<version>.md, then pushes gpwebcam and
+# gpwebcam-bin to the AUR with the key from the environment's AUR_KEY.
 name: Release
 
 on:
@@ -14,11 +15,19 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    # Holds AUR_KEY; it allows only tags v*.
+    environment: Arch Linux User Repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
-      - run: goreleaser release --clean
+      - name: Find the release notes
+        run: |
+          notes="docs/release-notes/${GITHUB_REF_NAME#v}.md"
+          test -s "$notes" || { echo "::error::missing $notes"; exit 1; }
+          echo "NOTES=$notes" >> "$GITHUB_ENV"
+      - run: goreleaser release --clean --release-notes "$NOTES"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
