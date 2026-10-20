@@ -1,6 +1,15 @@
 # Package changelog in chglog format; nFPM turns it into the Debian
 # changelog and the RPM %changelog. Add an entry for every release, with
 # semver set to the version and package release (version-1), newest first.
+- semver: 0.3.1-1
+  date: 2026-10-20T00:00:00Z
+  packager: Darko Demić <mail@darkodemic.com>
+  deb:
+    urgency: medium
+    distributions: [unstable]
+  changes:
+    - note: On the AUR as gpwebcam and gpwebcam-bin.
+    - note: Release archives include the desktop entry and the icon.
 - semver: 0.3.0-1
   date: 2026-10-10T00:00:00Z
   packager: Darko Demić <mail@darkodemic.com>

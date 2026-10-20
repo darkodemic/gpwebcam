@@ -75,13 +75,13 @@ Fedora's `ffmpeg-free` is built without an H.264 decoder and relies on `libopenh
 Order [I]:
 
 1. A GitHub release with packages from GoReleaser (`.deb`, `.rpm`, `.pkg.tar.zst`, `tar.gz`, checksums). Testing on Arch, Debian trixie and Ubuntu noble, and on Fedora with RPM Fusion ffmpeg and with `ffmpeg-free` + openh264.
-2. AUR: a hand-written source PKGBUILD (name `<n>`, with optdepends); optionally also `<n>-bin` through GoReleaser `aurs` [D: `-bin` suffix required, `.SRCINFO` with every push, SPDX in `license`].
+2. AUR: a hand-written source PKGBUILD (name `<n>`, with optdepends); optionally also `<n>-bin` through GoReleaser `aurs` [D: `-bin` suffix required, `.SRCINFO` with every push, SPDX in `license`]. Done differently on 2026-10-20: both packages through GoReleaser (`aur_sources` and `aurs`), pushed by the release workflow from 0.3.1 on (`aur-packages.md`).
 3. COPR for Fedora [D: a Fedora account is enough].
 4. Debian: an ITP bug, then mentors and a sponsor; the Go team names programs without the `golang-` prefix [D]. Ubuntu takes it from Debian. Estimate 1 to 3 months [I]. A PPA only if Ubuntu is needed sooner. Every Go dependency must be a Debian package too: `github.com/darkodemic/systray` is not, so it needs a package of its own first, and Debian has godbus as `golang-dbus` 5.1.0 while `go.mod` asks for v5.2.2 (checked 2026-10-07; `tray-and-recording.md` §10).
 5. RPM Fusion: a review in Bugzilla, once COPR is stable [D]. Official Fedora does not accept packages that need an out-of-tree kernel module [D].
 6. Optionally openSUSE OBS: one place for apt, yum and pacman repos [D].
 
-GoReleaser 2.18.2 builds nFPM packages and publishes `-bin` to the AUR for free; apt and yum repos are only in the Pro version, and Debian, PPA and COPR have no publisher [D].
+GoReleaser 2.18.2 builds nFPM packages and publishes `-bin` and source packages to the AUR for free; apt and yum repos are only in the Pro version, and Debian, PPA and COPR have no publisher [D].
 
 ## 7. Where we are and what is next
 
