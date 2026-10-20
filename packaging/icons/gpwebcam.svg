@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">gpwebcam</title>
+  <desc id="desc">Front-facing charcoal action camera with blue accents, a teal front display, reflective optical glass and cooling ribs. Fully vector, transparent background.</desc>
+  <defs>
+    <linearGradient id="body" x1="35" y1="58" x2="216" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#51565b"/><stop offset=".34" stop-color="#353a3f"/><stop offset="1" stop-color="#1d2125"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="38" y1="58" x2="197" y2="207" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#777e84"/><stop offset=".43" stop-color="#454b51"/><stop offset="1" stop-color="#101316"/>
+    </linearGradient>
+    <linearGradient id="bezel" x1="134" y1="51" x2="233" y2="154" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4e555c"/><stop offset=".32" stop-color="#292e33"/><stop offset=".72" stop-color="#101418"/><stop offset="1" stop-color="#2c3136"/>
+    </linearGradient>
+    <linearGradient id="cover" x1="145" y1="64" x2="218" y2="145" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#252e35"/><stop offset=".48" stop-color="#0c1218"/><stop offset="1" stop-color="#17232c"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="159" y1="76" x2="206" y2="131" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#768690"/><stop offset=".25" stop-color="#25313b"/><stop offset=".63" stop-color="#0b1016"/><stop offset="1" stop-color="#526775"/>
+    </linearGradient>
+    <radialGradient id="lens" cx=".34" cy=".22" r=".86">
+      <stop stop-color="#254958"/><stop offset=".35" stop-color="#101c2c"/><stop offset=".65" stop-color="#070c15"/><stop offset=".84" stop-color="#19203a"/><stop offset="1" stop-color="#235364"/>
+    </radialGradient>
+    <linearGradient id="glint" x1="160" y1="80" x2="188" y2="113" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ecfbff" stop-opacity=".82"/><stop offset=".47" stop-color="#b5e8ff" stop-opacity=".22"/><stop offset="1" stop-color="#a5d5ee" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="43" y1="96" x2="103" y2="158" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1688aa"/><stop offset=".48" stop-color="#12566f"/><stop offset="1" stop-color="#082b3f"/>
+    </linearGradient>
+    <linearGradient id="screen-glass" x1="46" y1="98" x2="91" y2="147" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e6fbff" stop-opacity=".42"/><stop offset=".6" stop-color="#c4f2ff" stop-opacity=".12"/><stop offset="1" stop-color="#c4f2ff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="40" y1="77" x2="111" y2="187" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#131a20"/><stop offset="1" stop-color="#080d12"/>
+    </linearGradient>
+    <linearGradient id="rib" x1="0" y1="165" x2="0" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#11171b"/><stop offset="1" stop-color="#20282e"/>
+    </linearGradient>
+    <radialGradient id="shadow"><stop stop-color="#05090e" stop-opacity=".25"/><stop offset="1" stop-color="#05090e" stop-opacity="0"/></radialGradient>
+    <clipPath id="display-clip"><rect x="43" y="95" width="64" height="64" rx="4"/></clipPath>
+    <clipPath id="lens-clip"><circle cx="183.5" cy="103" r="27"/></clipPath>
+  </defs>
+
+  <!-- Soft, scalable contact shadow and molded charcoal body. -->
+  <ellipse cx="128" cy="208" rx="116" ry="16" fill="url(#shadow)"/>
+  <rect x="17" y="57" width="222" height="151" rx="22" fill="#11171b"/>
+  <rect x="18.5" y="57.5" width="219" height="147" rx="20.5" fill="url(#body)" stroke="url(#edge)" stroke-width="2"/>
+  <path d="M29 79a11 11 0 0 1 11-11h85" stroke="#a9b2bb" stroke-opacity=".23" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M29 186a10 10 0 0 0 10 10h177a11 11 0 0 0 11-11" stroke="#7a858d" stroke-opacity=".17" stroke-linecap="round"/>
+
+  <!-- Black front panel, recording LED and a glass-covered live view. -->
+  <rect x="34" y="74" width="82" height="115" rx="10" fill="#111619" stroke="#636c73" stroke-opacity=".45"/>
+  <rect x="36" y="76" width="78" height="111" rx="8" fill="url(#panel)" stroke="#070a0d" stroke-width="1.5"/>
+  <rect x="67" y="82" width="16" height="4" rx="2" fill="#67181c"/>
+  <rect x="69" y="82.5" width="12" height="2.5" rx="1.25" fill="#ff5360"/>
+  <g clip-path="url(#display-clip)">
+    <rect x="43" y="95" width="64" height="64" fill="url(#screen)"/>
+    <path d="m40 137 21-23 15 14 15-19 21 23v31H40Z" fill="#5badb9" opacity=".7"/>
+    <path d="m52 124 9-10 9 9-8-3-5 5Z" fill="#c1e2e4" opacity=".64"/>
+    <path d="m78 125 13-16 10 11-9-4-8 11Z" fill="#b1dce2" opacity=".56"/>
+    <path d="m40 145 26-15 21 10 23-9v32H40Z" fill="#0c5969"/>
+    <path d="M42 146c16-3 32 8 65 0v17H42Z" fill="#073d54"/>
+    <path d="M49 151h18m9 3h21" stroke="#64c0d5" stroke-opacity=".35" stroke-linecap="round"/>
+    <path d="M43 95h64v8l-64 49Z" fill="url(#screen-glass)"/>
+    <path d="m45 153 60-47" stroke="#c1f0ff" stroke-opacity=".12"/>
+  </g>
+  <rect x="43" y="95" width="64" height="64" rx="4" stroke="#020a10" stroke-width="1.5"/>
+  <path d="M46 96h57" stroke="#ccf5ff" stroke-opacity=".35" stroke-linecap="round"/>
+
+  <!-- Four blue blocks, simplified for icon sizes. -->
+  <rect x="47" y="170" width="12" height="9" rx=".8" fill="#00a9e8"/>
+  <rect x="62" y="170" width="12" height="9" rx=".8" fill="#00c8ee"/>
+  <rect x="77" y="170" width="12" height="9" rx=".8" fill="#008ed1"/>
+  <rect x="92" y="170" width="12" height="9" rx=".8" fill="#edf8ff"/>
+
+  <!-- Recessed heat sink with raised vertical fins. -->
+  <rect x="133" y="151" width="97" height="42" rx="9" fill="#171d22" stroke="#4c565e" stroke-opacity=".55"/>
+  <path d="M143 166v19m19-19v19m19-19v19m19-19v19m19-19v19" stroke="url(#rib)" stroke-width="9" stroke-linecap="round"/>
+  <path d="M146 165v20m19-20v20m19-20v20m19-20v20m19-20v20" stroke="#65727b" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Raised lens protector with machined edges and dark optical glass. -->
+  <rect x="126" y="53" width="115" height="109" rx="20" fill="#090c0f" fill-opacity=".55"/>
+  <rect x="128" y="48" width="113" height="110" rx="20" fill="#11161c" stroke="#0b1014" stroke-width="1.5"/>
+  <rect x="130" y="49" width="109" height="107" rx="18" fill="url(#bezel)"/>
+  <path d="M132 72v-4a17 17 0 0 1 17-17h72a16 16 0 0 1 11 4" stroke="#9ca9b3" stroke-opacity=".37" stroke-width="1.5" stroke-linecap="round"/>
+  <rect x="137" y="57" width="94" height="92" rx="13" fill="#070c11" stroke="#515c66" stroke-opacity=".4" stroke-width="1.5"/>
+  <rect x="140" y="60" width="88" height="86" rx="11" fill="url(#cover)"/>
+  <path d="M142 85V71a9 9 0 0 1 9-9h47Z" fill="#c8e3f2" fill-opacity=".045"/>
+  <circle cx="183.5" cy="103" r="36.5" fill="#060b10" stroke="#4d5965" stroke-width="1.25"/>
+  <circle cx="183.5" cy="103" r="32.5" fill="url(#ring)"/>
+  <circle cx="183.5" cy="103" r="28.5" fill="#03080e"/>
+  <circle cx="183.5" cy="103" r="27" fill="url(#lens)"/>
+  <circle cx="183.5" cy="103" r="17.5" fill="#050914" fill-opacity=".7"/>
+  <circle cx="183.5" cy="103" r="12" fill="#02060c" fill-opacity=".8"/>
+  <g clip-path="url(#lens-clip)">
+    <path d="M153 79h53l-44 42h-9Z" fill="url(#glint)"/>
+    <ellipse cx="174" cy="86" rx="13" ry="4.5" transform="rotate(-33 174 86)" fill="#dbf6ff" fill-opacity=".22"/>
+  </g>
+  <path d="M164 90a24 24 0 0 1 13-9" stroke="#e0faff" stroke-opacity=".65" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M203 111a22 22 0 0 1-12 12" stroke="#47aec1" stroke-opacity=".52" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M148 145h69a10 10 0 0 0 10-10" stroke="#697d8d" stroke-opacity=".2" stroke-linecap="round"/>
+</svg>

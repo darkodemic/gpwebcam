@@ -494,20 +494,20 @@ func (s *server) picture(ctx context.Context, status string, animate bool) *plac
 func (s *server) show(ctx context.Context, status string) {
 	st := tray.Trouble
 	if status == placeholder.NotConnected {
-		st = tray.Off
+		st = tray.NoCamera
 	}
 	s.showPicture(ctx, status, false, st, status)
 }
 
 // showMoving shows a status that waits for something, with moving dots.
 func (s *server) showMoving(ctx context.Context, status string) {
-	s.showPicture(ctx, status, true, tray.Off, status)
+	s.showPicture(ctx, status, true, tray.Starting, status)
 }
 
-// showCalm shows a still status that is not a problem, and trayStatus in
-// the tray.
-func (s *server) showCalm(ctx context.Context, status, trayStatus string) {
-	s.showPicture(ctx, status, false, tray.Off, trayStatus)
+// showCalm shows a still status that is not a problem, with the tray in
+// state st and trayStatus in its menu.
+func (s *server) showCalm(ctx context.Context, status string, st tray.State, trayStatus string) {
+	s.showPicture(ctx, status, false, st, trayStatus)
 }
 
 func (s *server) showPicture(ctx context.Context, status string, animate bool, st tray.State, trayStatus string) {

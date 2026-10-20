@@ -73,7 +73,7 @@ func (n *Notifier) send(urgency, summary, body string, wait bool) {
 
 	args := []string{
 		"--app-name=gpwebcam",
-		"--icon=camera-web",
+		"--icon=gpwebcam",
 		"--urgency=" + urgency,
 		"--expire-time=6000",
 		"--", summary, body,

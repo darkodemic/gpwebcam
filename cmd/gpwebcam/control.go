@@ -42,7 +42,7 @@ func controlSocketPath() (string, error) {
 // controlStatus is the reply of GET /v1/status.
 type controlStatus struct {
 	Camera    string    `json:"camera"` // what the tray's first line says
-	State     string    `json:"state"`  // off, live or trouble
+	State     string    `json:"state"`  // a value of stateNames
 	Recording bool      `json:"recording"`
 	File      string    `json:"file,omitempty"` // once the recording's file is open
 	Since     time.Time `json:"since,omitempty"`
@@ -56,9 +56,19 @@ type controller interface {
 	stopRecording() (savedRecording, error)
 }
 
+// stateNames are the states in GET /v1/status, one per tray state.
+var stateNames = map[tray.State]string{
+	tray.NoCamera: "no-camera",
+	tray.Starting: "starting",
+	tray.Ready:    "ready",
+	tray.Paused:   "paused",
+	tray.Live:     "live",
+	tray.Trouble:  "trouble",
+}
+
 func (s *server) status() controlStatus {
 	v := s.view()
-	st := controlStatus{Camera: v.Status, State: map[tray.State]string{tray.Off: "off", tray.Live: "live", tray.Trouble: "trouble"}[v.State]}
+	st := controlStatus{Camera: v.Status, State: stateNames[v.State]}
 	var err error
 	st.Recording, st.File, st.Since, err = s.recStatus()
 	if err != nil {

@@ -61,7 +61,7 @@ Recording (`tray-and-recording.md` §5) turns the camera on regardless of the mo
 
 ## 4. Icon
 
-Darko, 2026-10-06: white while everything works, orange when there is an error, faded white when the camera is not running. Done: white while video flows; orange for problems; white at 45 % for all other states (no camera, starting, and with this proposal also pause and waiting for an application). A thin dark outline keeps the white icon visible on a light panel.
+Darko, 2026-10-06: white while everything works, orange when there is an error, faded white when the camera is not running. Done: white while video flows; orange for problems; white at 45 % for all other states (no camera, starting, and with this proposal also pause and waiting for an application). A thin dark outline keeps the white icon visible on a light panel. Since 2026-10-08 the icon is Darko's application icon, always in color, with a colored dot per state (`tray-and-recording.md` §10).
 
 ## 5. Decisions
 

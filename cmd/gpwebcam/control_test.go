@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/darkodemic/gpwebcam/internal/tray"
 )
 
 // fakeController records like the server, without a camera: a file opens
@@ -132,5 +134,13 @@ func TestControlSocketPath(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 	if _, err := controlSocketPath(); err == nil {
 		t.Error("no error without XDG_RUNTIME_DIR")
+	}
+}
+
+func TestStateNames(t *testing.T) {
+	for st := tray.NoCamera; st <= tray.Trouble; st++ {
+		if stateNames[st] == "" {
+			t.Errorf("tray state %d has no name in GET /v1/status", st)
+		}
 	}
 }
