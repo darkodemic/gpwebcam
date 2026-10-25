@@ -167,10 +167,12 @@ Verified 2026-09-29 and 2026-10-05:
 - 2026-10-07: the plans were translated into English; personal details of the test machine were removed from the documents and the whole history, and the rewritten history went to a new public repository `darkodemic/gpwebcam` (the old one is the private `darkodemic/gpwebcam-private-archive`). `v0.1.0` and `v0.2.0` are published (`release-0.2.0.md` §5).
 - 2026-10-08 to 2026-10-10: release 0.3.0 (`release-0.3.0.md`): Darko's application icon in the tray, the menu entry and notifications, and a tray icon that shows the state with a colored dot (`tray-and-recording.md` §10).
 - 2026-10-20: release 0.3.1 (`release-0.3.1.md`): `gpwebcam` and `gpwebcam-bin` on the AUR through GoReleaser, and the release workflow publishes releases itself, without a draft (`aur-packages.md`).
+- 2026-10-20: `gpwebcam-git` on the AUR too, built in CI and kept up to date by the release workflow (`aur-packages.md` §8).
+- 2026-10-25: Copr for Fedora, `darko/gpwebcam`, built by Packit from an RPM spec in the repository (`fedora-copr.md`).
 
 Next (`release-0.3.1.md` §3):
 
-1. COPR and RPM Fusion; a Debian ITP once `github.com/darkodemic/systray` is a Debian package.
+1. The first Copr build with release 0.3.2 (`fedora-copr.md` §6); later RPM Fusion; a Debian ITP once `github.com/darkodemic/systray` is a Debian package.
 2. A second device "GoPro 2", RTSP for networks with a firewall, several cameras.
 3. Left over from `first-slice-gw-start.md` §8: a check at run time that the route to the camera goes through the GoPro interface (`doctor` already checks it).
 
