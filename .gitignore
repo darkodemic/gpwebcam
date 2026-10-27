@@ -2,3 +2,4 @@
 /dist/
 /.worktrees/
 /packaging/man/*.gz
+/packaging/rpm/*.tar.gz

@@ -26,8 +26,9 @@ This file is for people who build, test or change gpwebcam. To install and use i
 | `internal/placeholder` | Renders the placeholder: one base frame with the title, plus a band of rows per status line and animation step, so animated dots cost little memory. |
 | `internal/notify` | Desktop notifications through `notify-send`, rate limited. |
 | `internal/v4l2` | Opens the v4l2loopback device, sets its format, finds it by label, and follows v4l2loopback's client usage event, which says whether an application streams from the device. |
-| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon; `icons/gpwebcam-outline.svg` is a monochrome outline icon kept in reserve and not installed), man page, Debian copyright, post-install message, the AUR install script (`aur/gpwebcam.install`), the `gpwebcam-git` PKGBUILD (`aur/gpwebcam-git/`) and the script that checks it (`aur/check-gpwebcam-git.sh`). |
+| `packaging/` | Files the packages install: systemd user unit, module configuration, menu entry, application icon (`icons/gpwebcam.svg`, the source of every icon; `icons/gpwebcam-outline.svg` is a monochrome outline icon kept in reserve and not installed), man page, Debian copyright, post-install message, the AUR install script (`aur/gpwebcam.install`), the `gpwebcam-git` PKGBUILD (`aur/gpwebcam-git/`) and the script that checks it (`aur/check-gpwebcam-git.sh`); the RPM spec for Copr and the script that makes its source archive with the Go modules vendored (`rpm/`). |
 | `.goreleaser.yaml` | Builds binaries, archives and `.deb`, `.rpm` and Arch packages. |
+| `.packit.yaml` | Packit: Copr builds of the RPM spec for pull requests and releases. |
 | `docs/plans-and-decisions/` | Design notes, decisions (numbered files) and test results. |
 | `docs/release-notes/` | The notes of each release, `<version>.md`, which the release workflow publishes. |
 
@@ -84,6 +85,7 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 
 - `.github/workflows/ci.yml` runs on every push to `main` and every pull request: `gofmt`, `go vet` and `go test -race` with ffmpeg, on Go 1.22 and on the Go from `mise.toml`, then a snapshot build of all packages with the tools from `mise.toml`, kept as the workflow artifact `packages`, together with the AUR PKGBUILDs in `aur/`; and a build of the `gpwebcam-git` PKGBUILD in an `archlinux` container, from the commit under test.
 - `.github/workflows/release.yml` runs when a tag `v*` is pushed: GoReleaser from `mise.toml` builds the packages, publishes the GitHub release with them, the archives, the source archive, `checksums.txt` and the notes from `docs/release-notes/<version>.md`, and pushes `gpwebcam` and `gpwebcam-bin` to the AUR, and `gpwebcam-git` when its PKGBUILD or install script changed. The job runs in the environment "Arch Linux User Repository", whose secret `AUR_KEY` is an SSH key of the maintainer's AUR account, used for nothing else, and which only tags `v*` can use. A tag with a suffix, such as `v0.4.0-rc1`, becomes a prerelease and is not pushed to the AUR.
+- Packit, a GitHub app configured in `.packit.yaml`, builds `packaging/rpm/gpwebcam.spec` in Copr: every pull request in a temporary project of Packit's, shown as a check, and every published release in [`darko/gpwebcam`](https://copr.fedorainfracloud.org/coprs/darko/gpwebcam/), which Fedora users install from. The RPM builds offline from the archive of `packaging/rpm/make-archive.sh`; to try the spec locally, run that script and `rpmbuild -ba` in a Fedora container, or `packit srpm`.
 - Actions are pinned to commits; Dependabot or a manual update moves them.
 - Check workflow changes locally with `mise exec actionlint@1.7.12 shellcheck@0.11.0 -- actionlint`.
 
@@ -98,7 +100,7 @@ To release:
    git push origin v0.3.1
    ```
 
-4. Check the release page and the AUR pages of `gpwebcam` and `gpwebcam-bin`. If the AUR push failed, the GitHub release is already out: fix the cause, then run the release job again (`gh run rerun <run id>`), which rebuilds, replaces the release files and pushes to the AUR.
+4. Check the release page, the AUR pages of `gpwebcam` and `gpwebcam-bin`, and the release build in Copr. If the AUR push failed, the GitHub release is already out: fix the cause, then run the release job again (`gh run rerun <run id>`), which rebuilds, replaces the release files and pushes to the AUR.
 
 ### The AUR package gpwebcam-git
 

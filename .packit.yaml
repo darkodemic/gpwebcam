@@ -1,0 +1,28 @@
+# Packit builds the RPM in Copr from packaging/rpm/gpwebcam.spec
+# (docs/plans-and-decisions/fedora-copr.md): a test build for every pull
+# request, in a temporary Copr project of Packit's, and a build of every
+# release into the project users install from.
+specfile_path: packaging/rpm/gpwebcam.spec
+upstream_package_name: gpwebcam
+downstream_package_name: gpwebcam
+upstream_tag_template: "v{version}"
+
+# make-archive.sh vendors the Go modules, so the SRPM build needs Go and
+# git; the RPM build itself then runs offline.
+srpm_build_deps:
+  - git
+  - golang
+actions:
+  create-archive:
+    - bash -c 'packaging/rpm/make-archive.sh "$PACKIT_PROJECT_VERSION" packaging/rpm'
+
+jobs:
+  - job: copr_build
+    trigger: pull_request
+    targets:
+      - fedora-all-x86_64
+      - fedora-all-aarch64
+  - job: copr_build
+    trigger: release
+    owner: darko
+    project: gpwebcam

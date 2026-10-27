@@ -20,7 +20,7 @@ Want to build or change gpwebcam? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 1. Install the package
 
-On Arch Linux, install it from the AUR. For other distributions, download the package for your distribution and architecture from the [releases page](https://github.com/darkodemic/gpwebcam/releases), then install it as below. To build it yourself, see [CONTRIBUTING.md](CONTRIBUTING.md).
+On Arch Linux, install it from the AUR, and on Fedora from Copr. For Debian and Ubuntu, download the package for your distribution and architecture from the [releases page](https://github.com/darkodemic/gpwebcam/releases), then install it as below. To build it yourself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Arch Linux**
 
@@ -44,13 +44,17 @@ sudo apt install ./gpwebcam_<version>_amd64.deb
 
 **Fedora** (not yet tried with a camera)
 
-v4l2loopback is not in Fedora, and Fedora's own ffmpeg cannot decode H.264 without extra steps. Both come from [RPM Fusion](https://rpmfusion.org/Configuration):
+v4l2loopback is not in Fedora, and Fedora's own ffmpeg cannot decode H.264 without extra steps. Both come from [RPM Fusion](https://rpmfusion.org/Configuration); gpwebcam comes from its [Copr repository](https://copr.fedorainfracloud.org/coprs/darko/gpwebcam/):
 
 ```sh
 sudo dnf install akmod-v4l2loopback v4l2loopback
 sudo dnf swap ffmpeg-free ffmpeg --allowerasing
-sudo dnf install ./gpwebcam-<version>.x86_64.rpm
+sudo dnf copr enable darko/gpwebcam
+sudo dnf install gpwebcam
 ```
+
+- The Copr package is built from source for the current Fedora releases and Rawhide, on x86_64 and aarch64, and dnf updates it like any other package.
+- The `.rpm` on the releases page also installs, with `sudo dnf install ./gpwebcam-<version>.x86_64.rpm`, but does not update itself.
 
 **Upgrading.** After installing a newer package, let systemd read the new unit and start the new version:
 
