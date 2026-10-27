@@ -88,3 +88,4 @@ go test ./...
 %changelog
 * Tue Oct 27 2026 Darko Demić <mail@darkodemic.com> - 0.3.2-1
 - First Copr build.
+- Power off camera in the tray menu; its button turns it on again.

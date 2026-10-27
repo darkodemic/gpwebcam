@@ -8,6 +8,7 @@
     urgency: medium
     distributions: [unstable]
   changes:
+    - note: Power off camera in the tray menu; its button turns it on again.
     - note: On Copr for Fedora as darko/gpwebcam.
     - note: The AUR source package keeps the Go module cache in its build dir.
 - semver: 0.3.1-1
