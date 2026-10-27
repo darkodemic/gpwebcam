@@ -26,6 +26,9 @@ type fakeCamera struct {
 	// HTTP 500 with error 4 (shutter is active).
 	refuse int
 	lazy   bool // start does not change the status
+	// noSleep answers the sleep command with 404, like a firmware without
+	// it; asleep is set once the command was accepted.
+	noSleep, asleep bool
 }
 
 func (f *fakeCamera) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +72,14 @@ func (f *fakeCamera) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{}`)
 	case pathInfo:
 		fmt.Fprint(w, `{"model_number":"65","model_name":"HERO13 Black","firmware_version":"H24.01.02.10.00","serial_number":"C0000123456789"}`)
+	case pathSleep:
+		if f.noSleep {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{}`)
+			return
+		}
+		f.asleep = true
+		fmt.Fprint(w, `{}`)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, `{}`)
@@ -246,5 +257,27 @@ func TestInfo(t *testing.T) {
 	i, err := c.Info(context.Background())
 	if err != nil || i.Model != "HERO13 Black" || i.Firmware != "H24.01.02.10.00" {
 		t.Errorf("Info = %+v, %v", i, err)
+	}
+}
+
+func TestSleep(t *testing.T) {
+	cam := &fakeCamera{status: StatusIdle}
+	c := newTestClient(t, cam)
+	if err := c.Sleep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cam.mu.Lock()
+	asleep := cam.asleep
+	cam.mu.Unlock()
+	if !asleep {
+		t.Error("the camera did not get the sleep command")
+	}
+
+	// A firmware without the command answers 404 with {}.
+	cam = &fakeCamera{status: StatusIdle, noSleep: true}
+	c = newTestClient(t, cam)
+	err := c.Sleep(context.Background())
+	if !errors.Is(err, ErrNoSleep) || !IsStatus(err, http.StatusNotFound) {
+		t.Errorf("no sleep command: %v", err)
 	}
 }

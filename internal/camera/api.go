@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -22,6 +23,10 @@ const (
 	pathExit      = "/gopro/webcam/exit"
 )
 
+// pathSleep is from the older gpControl API, which Open GoPro does not
+// document; see Sleep.
+const pathSleep = "/gp/gpControl/command/system/sleep"
+
 // ErrNoAnswer means the camera's HTTP server did not answer within
 // StartOptions.Connect. A replug usually fixes it.
 var ErrNoAnswer = errors.New("the camera does not answer")
@@ -31,6 +36,10 @@ var ErrNoAnswer = errors.New("the camera does not answer")
 // battery refused every start this way; with the battery in, one start
 // 2.3 s after a stop did (both 2026-10-06).
 var ErrCannotCapture = errors.New("the camera cannot start capturing")
+
+// ErrNoSleep means the camera answered the sleep command with HTTP 404: its
+// firmware does not have it.
+var ErrNoSleep = errors.New("the camera does not know the sleep command")
 
 // errShutter is the webcam error code behind ErrCannotCapture.
 const errShutter WebcamError = 4
@@ -157,6 +166,23 @@ func (c *Client) Exit(ctx context.Context) error {
 		return err
 	}
 	return checkCommand("webcam exit", body)
+}
+
+// Sleep turns the camera off, as a press of its button does: it leaves the
+// USB bus, and only its button turns it on again. Open GoPro has no HTTP
+// command for this; the older gpControl API has one, and a HERO13 Black
+// with firmware 02.10 still answers it over USB with 200 and {}, leaving
+// the bus 1.7 s later (measured 2026-10-27, with the webcam stopped). A
+// camera without the command answers 404.
+func (c *Client) Sleep(ctx context.Context) error {
+	body, err := c.get(ctx, pathSleep, "")
+	if IsStatus(err, http.StatusNotFound) {
+		return fmt.Errorf("%w: %w", ErrNoSleep, err)
+	}
+	if err != nil {
+		return err
+	}
+	return checkCommand("sleep", body)
 }
 
 // StartOptions tunes StartWebcam.

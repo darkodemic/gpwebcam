@@ -108,6 +108,9 @@ type server struct {
 	usageOK, used atomic.Bool
 	// present is set while a camera is connected.
 	present atomic.Bool
+	// offWanted is set by a click on "Power off camera" until the main loop
+	// has turned the camera off, or failed to.
+	offWanted atomic.Bool
 
 	// Recording: recWant while the user wants it, since recSince; recLive
 	// while a session streams; rec is the file being written, if any, and
@@ -279,20 +282,42 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 	noVideo := 0
 	present := false // a camera is connected, as far as notifications go
 	lastName := ""
+	// away and awayTray are the placeholder and the tray's first line while
+	// no camera is connected: not connected, or turned off from the menu.
+	away, awayTray := placeholder.NotConnected, placeholder.NotConnected
 	unplugged := func(iface usbnet.Interface) {
 		log.Info("camera unplugged", "iface", iface.Name)
 		noVideo, present = 0, false
-		s.present.Store(false)
-		// The session already saved the recording; a camera that comes
-		// back does not record again by itself.
-		s.recMu.Lock()
-		s.recWant = false
-		s.recMu.Unlock()
+		s.forget() // the session already saved the recording
 		s.show(ctx, placeholder.NotConnected)
 		s.note(notify.Low, modelName(iface)+" disconnected", "The webcam shows a placeholder until the camera is back.")
 	}
+	// turnedOff turns the camera off, once powerOff has ended the session
+	// or the idle wait, and tells how it went.
+	turnedOff := func(iface usbnet.Interface) {
+		model := modelName(iface)
+		err := s.turnOff(ctx, iface)
+		switch {
+		case ctx.Err() != nil:
+			return
+		case err == nil:
+			log.Info("camera turned off", "iface", iface.Name)
+			noVideo, present = 0, false
+			s.forget()
+			away, awayTray = placeholder.Off(model), model+" is off. Turn it on with its button."
+			s.showCalm(ctx, away, tray.NoCamera, awayTray)
+			s.note(notify.Low, model+" is off", "Turn it on with its button; gpwebcam carries on by itself.")
+		default:
+			log.Warn("the camera did not turn off", "iface", iface.Name, "err", err)
+			if _, lerr := net.InterfaceByName(iface.Name); lerr != nil {
+				unplugged(iface)
+				return
+			}
+			s.note(notify.Normal, model+" did not turn off", err.Error())
+		}
+	}
 	for {
-		iface, err := s.waitForCamera(ctx)
+		iface, err := s.waitForCamera(ctx, away, awayTray)
 		if err != nil {
 			return interrupted(ctx, err, log)
 		}
@@ -303,8 +328,14 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 		if !present {
 			present = true
 			s.present.Store(true)
+			away, awayTray = placeholder.NotConnected, placeholder.NotConnected
 			s.reportModel(iface)
 			s.noteConnected(iface)
+		}
+		if s.offWanted.Load() {
+			// Asked between sessions, with nothing to end.
+			turnedOff(iface)
+			continue
 		}
 		if !s.wantCamera() {
 			err := s.idle(ctx, iface)
@@ -316,6 +347,8 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 				log.Info("network interface renamed", "old", iface.Name)
 			case errors.Is(err, errUnplugged):
 				unplugged(iface)
+			case errors.Is(err, errPowerOff):
+				turnedOff(iface)
 			case err != nil:
 				return err
 			}
@@ -343,11 +376,18 @@ func cmdServe(args []string, log *slog.Logger, once bool) error {
 			log.Info("camera stopped: the camera mode is off")
 			noVideo = 0
 			continue
+		case errors.Is(err, errPowerOff):
+			log.Info("camera stopped: turning it off")
+			turnedOff(iface)
+			continue
 		case errors.Is(err, errUnplugged):
 			unplugged(iface)
 			continue
 		}
 		log.Warn("session ended", "iface", iface.Name, "err", err)
+		if s.offWanted.Load() {
+			continue // asked meanwhile: turn the camera off instead of retrying
+		}
 		if errors.Is(err, stream.ErrNoVideo) {
 			noVideo++
 		} else {
@@ -440,9 +480,10 @@ func findDevice(f startFlags) (string, error) {
 	return v4l2.FindByLabel("/sys", f.label)
 }
 
-// waitForCamera polls for a GoPro interface until one appears. It returns
-// an error only when ctx ends or the device can no longer be written.
-func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
+// waitForCamera polls for a GoPro interface until one appears; meanwhile
+// the placeholder shows away and the tray awayTray. It returns an error
+// only when ctx ends or the device can no longer be written.
+func (s *server) waitForCamera(ctx context.Context, away, awayTray string) (usbnet.Interface, error) {
 	var last string
 	shown := false
 	for {
@@ -454,7 +495,7 @@ func (s *server) waitForCamera(ctx context.Context) (usbnet.Interface, error) {
 			return iface, nil
 		}
 		if !shown {
-			s.show(ctx, placeholder.NotConnected)
+			s.showCalm(ctx, away, tray.NoCamera, awayTray)
 			shown = true
 		}
 		s.maybeResize(ctx)
@@ -588,6 +629,9 @@ func (s *server) session(parent context.Context, iface usbnet.Interface) (hw str
 		s.cancelSession = nil
 		s.mu.Unlock()
 	}()
+	if s.offWanted.Load() {
+		return "", errPowerOff // asked just before this session
+	}
 	if !s.once {
 		go s.watchDemand(ctx, cancel)
 	}
@@ -722,7 +766,8 @@ func (s *server) stream(ctx context.Context, cancel context.CancelCauseFunc, par
 
 // ended picks the error a session reports: nil after a signal, errUnplugged
 // or errRenamed after the interface disappeared, errReconfigured after a
-// settings change, errIdle when the camera should stop, otherwise err.
+// settings change, errIdle, errOff or errPowerOff when the camera should
+// stop, otherwise err.
 func ended(ctx context.Context, err error) error {
 	if ctx.Err() == nil {
 		return err
@@ -738,6 +783,8 @@ func ended(ctx context.Context, err error) error {
 		return errIdle
 	case errors.Is(cause, errOff):
 		return errOff
+	case errors.Is(cause, errPowerOff):
+		return errPowerOff
 	}
 	return nil
 }

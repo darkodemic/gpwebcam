@@ -28,6 +28,7 @@ The sources are the old `gopro` script and the README from the fork, the Open Go
 | Resolution | `res` 7 = 720p, 12 = 1080p; 4 = 480p on HERO9 and HERO10 only | Open GoPro |
 | FOV | wide 0, narrow 2, superview 3, linear 4, the same in both APIs | Open GoPro setting 43; upstream #77 |
 | Old API | `/gp/gpWebcam/START?res=1080`, `SETTINGS?fov=`, `STOP`, `EXIT` on port 80; undocumented, reportedly also works on HERO13 | upstream #77 |
+| Power off | `/gp/gpControl/command/system/sleep` on port 8080 over USB, from the old gpControl API; Open GoPro has no power command over HTTP. HTTP 200 `{}`, and the camera leaves the USB bus 1.7 s later; only its button turns it on, after which USB works without a replug. Without keep-alive the camera on USB power did not turn off in 7.5 min, past auto power down (setting 59) | verified 2026-10-27 on 02.10, without the battery (`camera-power-off.md`) |
 | Response | `{"status":N,"error":N}`; status 0 Off, 1 Idle, 2 and 3 stream running, 4 unavailable; error 0 means success. After plugging in the status is Idle, after stop and exit it is Off | Open GoPro; upstream #28; verified |
 | Prerequisites | `wired_usb?p=0` before webcam commands; `keep_alive` every 3 s | Open GoPro |
 | Stream | unicast MPEG-TS over UDP to the address the start came from, port 8554 by default; H.264 1920x1080 29.97 fps with AAC, an empty AC3 and a private stream `0x80` | Open GoPro; upstream #56 |
@@ -169,6 +170,7 @@ Verified 2026-09-29 and 2026-10-05:
 - 2026-10-20: release 0.3.1 (`release-0.3.1.md`): `gpwebcam` and `gpwebcam-bin` on the AUR through GoReleaser, and the release workflow publishes releases itself, without a draft (`aur-packages.md`).
 - 2026-10-20: `gpwebcam-git` on the AUR too, built in CI and kept up to date by the release workflow (`aur-packages.md` §8).
 - 2026-10-25: Copr for Fedora, `darko/gpwebcam`, built by Packit from an RPM spec in the repository (`fedora-copr.md`).
+- 2026-10-27: **Power off camera** in the tray menu (`camera-power-off.md`), through the old gpControl sleep command, since Open GoPro has none over HTTP; the button turns the camera on again.
 
 Next (`release-0.3.1.md` §3):
 

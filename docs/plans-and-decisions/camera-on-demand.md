@@ -44,6 +44,8 @@ The camera does not stop right away when the last application stops video, but a
 
 The service sends STOP and EXIT, and the USB network stays up. It needs to be measured whether the HERO13 turns itself off when there is no `keep_alive`. If it does, the service cannot wake it over USB, so `keep_alive` must then be sent between uses too: the camera is on, but the sensor and the encoder are not running.
 
+Measured 2026-10-27 (`camera-power-off.md` §2): with the service stopped, so without keep-alive, the HERO13 on USB power stayed on for 7.5 minutes, past its auto power down of 5 minutes, and still answered; measured without its battery. The service keeps sending keep-alive between uses, as the spec asks, but it is not what keeps the camera on.
+
 ### 3.4 Resolution without a restart
 
 When no application has video running, the service can reopen the device at the new size. The note "Applies when gpwebcam restarts" then mostly goes away. The exception is an application that has set the format but has not started video: it still holds the format, so the fix from `8fb1ca7` applies and the old size stays.
@@ -101,3 +103,4 @@ Darko, 2026-10-06:
   - The note in the menu and the texts in the README, the man page and `gpwebcam config -h`: the new resolution applies as soon as no application uses the camera.
 - 2026-10-06, live test of §3.4 (a build with checkboxes, without the fork; an ffmpeg reader instead of an application): `res 1080` while nobody uses the device, and the device switches to 1920x1080 in 0.1 s; the reader turns video on, the camera starts in 1080p, video after 4.2 s; `res 720` while the reader runs does not change the device; the reader finishes, the camera stops after 17 s (grace period), and the device switches to 1280x720 right away.
 - Next: commit, then slice 2 of `tray-and-recording.md`.
+- 2026-10-27: measured that the camera does not turn itself off on USB power without keep-alive (§3.3). Turning it off from the menu is a feature of its own, `camera-power-off.md`.

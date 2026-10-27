@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/netip"
 	"time"
 
-	"github.com/darkodemic/gpwebcam/internal/camera"
 	"github.com/darkodemic/gpwebcam/internal/placeholder"
 	"github.com/darkodemic/gpwebcam/internal/settings"
 	"github.com/darkodemic/gpwebcam/internal/tray"
@@ -81,10 +79,12 @@ func (s *server) wantCamera() bool {
 }
 
 // idle waits, with the camera's webcam mode off, until the camera should
-// stream, the interface disappears or ctx ends. It keeps the camera awake
-// meanwhile: the camera powers itself off after its auto power down time
-// without keep-alive (5 minutes on Darko's HERO13, setting 59), and over USB
-// it cannot be woken again.
+// stream, the user asks to turn it off, the interface disappears or ctx
+// ends. It sends keep-alive meanwhile, as the spec asks. Whether the camera
+// needs it between uses is open: the test HERO13's auto power down (setting
+// 59) is 5 minutes, yet on USB power it stayed on for 7.5 minutes without
+// keep-alive (2026-10-27, without its battery); and over USB the service
+// could not wake it if it did turn off.
 func (s *server) idle(parent context.Context, iface usbnet.Interface) error {
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
@@ -95,6 +95,9 @@ func (s *server) idle(parent context.Context, iface usbnet.Interface) error {
 	defer t.Stop()
 	shown := ""
 	for !s.wantCamera() {
+		if s.offWanted.Load() {
+			return errPowerOff
+		}
 		if err := s.feed.Err(); err != nil {
 			return fmt.Errorf("write placeholder: %w", err)
 		}
@@ -121,15 +124,10 @@ func (s *server) idle(parent context.Context, iface usbnet.Interface) error {
 
 // idleKeepAlive sends keep-alive to an idle camera until ctx ends.
 func (s *server) idleKeepAlive(ctx context.Context, iface usbnet.Interface) {
-	host, err := usbnet.WaitIPv4(ctx, iface.Name, 250*time.Millisecond)
+	cam, err := s.cameraClient(ctx, iface)
 	if err != nil {
 		return // ctx ended; a session reports a missing address
 	}
-	camAddr, err := camera.AddressFor(host)
-	if err != nil {
-		return
-	}
-	cam := camera.NewClient(netip.AddrPortFrom(camAddr, camera.HTTPPort), host.Addr(), s.f.httpTimeout)
 	keepAlive(ctx, cam, s.f.httpTimeout, s.log)
 }
 
