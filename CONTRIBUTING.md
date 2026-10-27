@@ -55,7 +55,7 @@ systemctl --user stop gpwebcam
 ./gpwebcam run
 ```
 
-The tray icon of a gpwebcam started this way uses the same settings file as the service. To look at the icon's menu without a panel, find gpwebcam's name on the session bus with `busctl --user list | grep gpwebcam`, then call `busctl --user call <name> /StatusNotifierItem/menu com.canonical.dbusmenu GetLayout iias -- 0 -1 0`.
+The tray icon of a gpwebcam started this way uses the same settings file as the service. To look at the icon's menu without a panel, find gpwebcam's name on the session bus with `busctl --user list | grep gpwebcam`, then call `busctl --user call <name> /StatusNotifierItem/menu com.canonical.dbusmenu GetLayout iias -- 0 -1 0`. To click an item, take its id from that layout and call `busctl --user call <name> /StatusNotifierItem/menu com.canonical.dbusmenu Event isvu <id> clicked s "" 0`; this is how the power off was tested without a panel.
 
 ## Packages
 

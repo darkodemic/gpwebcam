@@ -34,6 +34,9 @@ type View struct {
 	// CanRecord enables the record item: a camera is connected and its mode
 	// is not off.
 	CanRecord bool
+	// CanPowerOff enables the power off item: a camera is connected and is
+	// not being turned off already.
+	CanPowerOff bool
 	// Recording is set while a recording runs, since RecordingSince.
 	Recording      bool
 	RecordingSince time.Time
@@ -47,6 +50,8 @@ type Actions struct {
 	Restart func()
 	// Record starts or stops a recording.
 	Record func(on bool)
+	// PowerOff turns the camera off, as its button does.
+	PowerOff func()
 	// OpenRecordings shows the recordings folder in the file manager.
 	OpenRecordings func()
 	// Quit stops gpwebcam.
@@ -100,7 +105,7 @@ func (t *Tray) Stop() {
 
 // click is a menu item's setting and the value picking it sets; an empty
 // value flips an on/off setting. The keys "restart", "record",
-// "recordings" and "quit" are actions, not settings.
+// "recordings", "poweroff" and "quit" are actions, not settings.
 type click struct{ key, value string }
 
 // toggle returns the opposite of an on/off setting.
@@ -134,6 +139,7 @@ type items struct {
 	resPending *systray.MenuItem
 	hwdec      *systray.MenuItem
 	notify     *systray.MenuItem
+	powerOff   *systray.MenuItem
 	restart    *systray.MenuItem
 	hide       *systray.MenuItem
 	quit       *systray.MenuItem
@@ -216,6 +222,8 @@ func (t *Tray) run() {
 	it.notify = systray.AddMenuItemCheckbox("Notifications", "", false)
 	forward(it.notify, func() click { return click{key: "notify"} })
 	systray.AddSeparator()
+	it.powerOff = systray.AddMenuItem("Power off camera", "Turn the GoPro off, as its button does. Turn it on again with the button.")
+	forward(it.powerOff, func() click { return click{key: "poweroff"} })
 	it.restart = systray.AddMenuItem("Restart gpwebcam", "")
 	forward(it.restart, func() click { return click{key: "restart"} })
 	it.hide = systray.AddMenuItem("Hide icon", "Bring it back with: gpwebcam config tray on")
@@ -246,6 +254,9 @@ func (t *Tray) run() {
 				continue
 			case "recordings":
 				t.act.OpenRecordings()
+				continue
+			case "poweroff":
+				t.act.PowerOff()
 				continue
 			case "quit":
 				t.act.Quit()
@@ -280,6 +291,12 @@ func (it *items) show(v View) {
 		} else {
 			it.record.Disable()
 		}
+	}
+
+	if v.CanPowerOff {
+		it.powerOff.Enable()
+	} else {
+		it.powerOff.Disable()
 	}
 
 	for m, item := range it.cameras {

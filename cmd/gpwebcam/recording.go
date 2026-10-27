@@ -47,6 +47,9 @@ func (s *server) setRecording(on bool) error {
 		if !s.present.Load() {
 			return errors.New("no camera is connected")
 		}
+		if s.offWanted.Load() {
+			return errors.New("the camera is being turned off")
+		}
 	}
 	s.recMu.Lock()
 	if on && !s.recWant {
