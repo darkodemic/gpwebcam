@@ -54,7 +54,7 @@ sudo dnf install gpwebcam
 ```
 
 - The Copr package is built from source for the current Fedora releases and Rawhide, on x86_64 and aarch64, and dnf updates it like any other package.
-- The `.rpm` on the releases page also installs, with `sudo dnf install ./gpwebcam-<version>.x86_64.rpm`, but does not update itself.
+- The `.rpm` on the releases page also installs, with `sudo dnf install ./gpwebcam-<version>.x86_64.rpm`, but does not update itself. To move from it to Copr, enable the repository and run `sudo dnf upgrade gpwebcam`; `dnf install` leaves an installed package as it is.
 
 **Upgrading.** After installing a newer package, let systemd read the new unit and start the new version:
 

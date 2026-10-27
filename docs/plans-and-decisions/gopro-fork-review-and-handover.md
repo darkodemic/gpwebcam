@@ -171,10 +171,11 @@ Verified 2026-09-29 and 2026-10-05:
 - 2026-10-20: `gpwebcam-git` on the AUR too, built in CI and kept up to date by the release workflow (`aur-packages.md` §8).
 - 2026-10-25: Copr for Fedora, `darko/gpwebcam`, built by Packit from an RPM spec in the repository (`fedora-copr.md`).
 - 2026-10-27: **Power off camera** in the tray menu (`camera-power-off.md`), through the old gpControl sleep command, since Open GoPro has none over HTTP; the button turns the camera on again.
+- 2026-10-27: release 0.3.2 prepared (`release-0.3.2.md`): Power off camera, the first Copr build, and the AUR module cache fix.
 
-Next (`release-0.3.1.md` §3):
+Next (`release-0.3.2.md` §3):
 
-1. The first Copr build with release 0.3.2 (`fedora-copr.md` §6); later RPM Fusion; a Debian ITP once `github.com/darkodemic/systray` is a Debian package.
+1. RPM Fusion once Copr is stable; a Debian ITP once `github.com/darkodemic/systray` is a Debian package.
 2. A second device "GoPro 2", RTSP for networks with a firewall, several cameras.
 3. Left over from `first-slice-gw-start.md` §8: a check at run time that the route to the camera goes through the GoPro interface (`doctor` already checks it).
 

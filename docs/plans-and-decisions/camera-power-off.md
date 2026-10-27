@@ -1,6 +1,6 @@
 # Power off the camera from the menu
 
-- **Status:** Accepted 2026-10-27: the old gpControl sleep command over USB, as **Power off camera** in the tray menu; written and tested live the same day (§5).
+- **Status:** Accepted 2026-10-27: the old gpControl sleep command over USB, as **Power off camera** in the tray menu; written and tested live the same day, released in 0.3.2 (§5).
 - **Date:** 2026-10-27
 - **Owner:** Darko
 - **Related:** `camera-on-demand.md` (modes, keep-alive between uses); `tray-and-recording.md` (the tray); `open-gopro-webcam-api.md` (the HTTP API); handover note §2 (camera, battery)
@@ -48,4 +48,5 @@ Decided 2026-10-27 (Darko): A now, as a plain power off. C is a separate questio
 - 2026-10-27, live test with a build from the worktree instead of the service, the click sent over D-Bus (`com.canonical.dbusmenu Event` on the item): while an ffmpeg reader used the device and the camera streamed, click at 17:28:11.57, webcam stopped (STOP, EXIT) at :12.35, sleep sent, interface gone at :13.19; the reader kept running on the placeholder, and the "is off" notification arrived.
 - 2026-10-27, review (`reviewer` agent) found two races the live test could not reach, both fixed with tests: a click in the moment between the camera leaving the bus and the service noticing left the flag set, so the camera would have been turned off right after the next plug-in; and Record during the turn off survived it and would have started the camera on its return. Also from the review: a click right after a session failed no longer waits for the retry, `sleepCamera` stops a webcam that still streams, and a camera that leaves the bus before answering counts as off.
 - 2026-10-27, live test of the build with the fixes: the button turned the camera on and the build found it 1 s later, idle in mode demand; the click from the idle state at 17:39:16.70, sleep sent at once (no webcam to stop), interface gone at :17.28; the tooltip read "GoPro HERO13 Black is off. Turn it on with its button.", Record and Power off camera were disabled, `gpwebcam record` answered "Not recording."
-- Next: commit; `gpwebcam camera off` for desktops without a tray; BLE (§3 C) as its own plan if turning the camera on from the computer is wanted.
+- 2026-10-27: merged (PR #13) and taken into release 0.3.2 (`release-0.3.2.md`), whose R9 checks it with the released package on the test machine.
+- Next: `gpwebcam camera off` for desktops without a tray; BLE (§3 C) as its own plan if turning the camera on from the computer is wanted.

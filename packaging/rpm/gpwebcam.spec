@@ -1,16 +1,16 @@
 # RPM spec for Copr (docs/plans-and-decisions/fedora-copr.md). It builds
 # from the archive that packaging/rpm/make-archive.sh writes: the source
 # with the Go modules vendored, so the build needs no network. Packit sets
-# Version and Release from the git tag; the values here are for local
-# builds. Keep the installed files in step with the nFPM packages in
-# .goreleaser.yaml.
+# Version from the git tag and, for pull request builds only, adds a
+# snapshot suffix to Release; release builds use the Release below. Keep
+# the installed files in step with the nFPM packages in .goreleaser.yaml.
 
 # The gobuild macro uses GOPATH mode unless told otherwise; gpwebcam is a
 # Go module.
 %global gomodulesmode GO111MODULE=on
 
 Name:           gpwebcam
-Version:        0.3.1
+Version:        0.3.2
 Release:        1%{?dist}
 Summary:        Use a GoPro connected over USB as a Linux webcam
 
@@ -86,5 +86,6 @@ go test ./...
 %{_mandir}/man1/gpwebcam.1*
 
 %changelog
-* Tue Oct 20 2026 Darko Demić <mail@darkodemic.com> - 0.3.1-1
+* Tue Oct 27 2026 Darko Demić <mail@darkodemic.com> - 0.3.2-1
 - First Copr build.
+- Power off camera in the tray menu; its button turns it on again.
