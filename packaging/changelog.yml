@@ -1,6 +1,15 @@
 # Package changelog in chglog format; nFPM turns it into the Debian
 # changelog and the RPM %changelog. Add an entry for every release, with
 # semver set to the version and package release (version-1), newest first.
+- semver: 0.3.2-1
+  date: 2026-10-27T00:00:00Z
+  packager: Darko Demić <mail@darkodemic.com>
+  deb:
+    urgency: medium
+    distributions: [unstable]
+  changes:
+    - note: On Copr for Fedora as darko/gpwebcam.
+    - note: The AUR source package keeps the Go module cache in its build dir.
 - semver: 0.3.1-1
   date: 2026-10-20T00:00:00Z
   packager: Darko Demić <mail@darkodemic.com>

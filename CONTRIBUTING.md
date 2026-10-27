@@ -91,13 +91,13 @@ The packages follow the distributions' rules (ADR 0005, `docs/plans-and-decision
 
 To release:
 
-1. In a pull request: add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the RPM `%changelog`); write the release notes in `docs/release-notes/<version>.md`, which the release workflow publishes as they are and without which it stops; and write a release plan, as `docs/plans-and-decisions/release-0.3.1.md`. The documents are written for the release before the tag and do not name the release commit, since the tag records it; nothing needs a documentation change after the release.
+1. In a pull request: add an entry for the version to `packaging/changelog.yml`, newest first (it becomes the Debian changelog and the `%changelog` of the GoReleaser RPM); set `Version` in `packaging/rpm/gpwebcam.spec` and add a `%changelog` entry there for the Copr RPM, whose Release Packit keeps as it is for release builds; write the release notes in `docs/release-notes/<version>.md`, which the release workflow publishes as they are and without which it stops; and write a release plan, as `docs/plans-and-decisions/release-0.3.2.md`. The documents are written for the release before the tag and do not name the release commit, since the tag records it; nothing needs a documentation change after the release.
 2. Check the packages in the pull request's `packages` artifact, including the PKGBUILDs in `aur/`. The release is published as soon as the tag is pushed, so this is the last look before it is public.
 3. Merge, make sure `main` is green, then tag and push:
 
    ```sh
-   git tag -s v0.3.1 -m "gpwebcam 0.3.1"
-   git push origin v0.3.1
+   git tag -s v0.3.2 -m "gpwebcam 0.3.2"
+   git push origin v0.3.2
    ```
 
 4. Check the release page, the AUR pages of `gpwebcam` and `gpwebcam-bin`, and the release build in Copr. If the AUR push failed, the GitHub release is already out: fix the cause, then run the release job again (`gh run rerun <run id>`), which rebuilds, replaces the release files and pushes to the AUR.

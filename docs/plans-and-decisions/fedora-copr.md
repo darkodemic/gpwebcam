@@ -56,6 +56,8 @@ Packit test build, 2026-10-27, for the pull request that adds `.packit.yaml` (#1
 - All eight chroots built: `fedora-43`, `44`, `45` and `rawhide`, each on x86_64 and aarch64. Each made the package, `-debuginfo` and `-debugsource`, with a release such as `1.<timestamp>.pr11.3.g533792d.fc43`.
 - The fedora-43 x86_64 log shows `%gobuild` with `-mod=vendor`, PIE, external linking with Fedora's hardening flags and `-X main.version=0.3.1`; `desktop-file-validate` passes; every Go package's tests pass.
 
+Upgrade from the GoReleaser RPM, 2026-10-27, `fedora:44` with dnf5 5.4.3: with `gpwebcam-0.3.1-1` from the release page installed and the pull request's Copr project enabled, `dnf install gpwebcam` answers "already installed" and changes nothing; `dnf upgrade gpwebcam` replaces it with the Copr package. The README and the 0.3.2 notes tell users with the release RPM to run `dnf upgrade`.
+
 ## 4. How builds reach Copr
 
 | Option | How | For | Against |
@@ -77,10 +79,13 @@ Decision, Darko, 2026-10-25: **A**, Packit; one more GitHub app is acceptable.
 
 Packit builds on a GitHub release, so the first build in `darko/gpwebcam` comes with the next release, 0.3.2, which also takes the Go module cache fix to the AUR (`aur-packages.md` §8). The pull request that adds `.packit.yaml` already gets a test build in Packit's own project.
 
+Decision, Darko, 2026-10-27: the release job sets `update_release: false`. Packit otherwise appends its snapshot suffix to Release in every SRPM it makes, so a release would reach users as `0.3.2-1.<timestamp>.<branch>.g<sha>.fc43`; with the option it is `0.3.2-1.fc43`, the same version-release as the GoReleaser RPM. Pull request builds keep the suffix. Packit still sets Version from the tag, and every release sets `Version` and a `%changelog` entry in the spec (CONTRIBUTING, "To release"). The release plan is `release-0.3.2.md`.
+
 ## 7. Where we are and what is next
 
 - 2026-10-20: Darko asked to continue with Fedora. The spec, the archive script and `.packit.yaml` written and tested (§3) in the worktree `.worktrees/fedora-copr`.
 - 2026-10-25: Darko chose Packit (§4) and is setting up the accounts and the Copr project (§5). The Copr owner is `darko`, in `.packit.yaml`.
 - 2026-10-25: Darko made the FAS account and the Copr project `darko/gpwebcam` (§5, steps 1, 2 and 4). Checked through the Copr API: chroots `fedora-43`, `44`, `45` and `rawhide` for x86_64 and aarch64 (Rawhide added afterwards, because Follow Fedora branching forks the new release's chroots from it), network off, Follow Fedora branching on, `github.com/darkodemic/gpwebcam` allowed for Packit, install instructions set. The README, CONTRIBUTING and `packaging-and-release.md` §6 describe Copr.
 - 2026-10-27: Darko installed the Packit app on `darkodemic/gpwebcam` and confirmed the FAS account (§5, step 3). Packit's test build of the pull request passed on all eight chroots (§3), with the SRPM step downloading the Go modules (§2).
+- 2026-10-27: release 0.3.2 prepared (`release-0.3.2.md`), with `update_release: false` for release builds (§6).
 - Next: release 0.3.2, the first build in `darko/gpwebcam`, where Darko approves Packit's builder permission (§5, step 3; §6).

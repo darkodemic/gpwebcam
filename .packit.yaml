@@ -22,7 +22,11 @@ jobs:
     targets:
       - fedora-all-x86_64
       - fedora-all-aarch64
+  # Release builds keep the spec's Release (1%{?dist}), so users get a
+  # clean version-release, without the snapshot suffix that pull request
+  # builds carry.
   - job: copr_build
     trigger: release
     owner: darko
     project: gpwebcam
+    update_release: false
