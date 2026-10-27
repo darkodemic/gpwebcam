@@ -124,6 +124,7 @@ While the service runs, the gpwebcam icon in the system tray shows the state wit
 - **Field of view**: Wide, Narrow, SuperView or Linear. The camera restarts with the new one, which takes about 4 seconds; applications keep the camera open meanwhile.
 - **Resolution**: 1080p or 720p. Applications keep the frame size they started the video with, so a new resolution applies once no application uses the camera; turn the video off and on again in the application.
 - **Hardware decoding** and **Notifications**, on or off.
+- **Power off camera** turns the GoPro off, as its button does: the webcam stops first, then the camera goes dark and leaves the USB. Turn it on again with its button; gpwebcam carries on by itself. The picture and a notification say so meanwhile.
 - **Restart gpwebcam**, when it runs as the systemd service.
 - **Hide icon**. Bring it back with `gpwebcam config tray on`.
 - **Quit gpwebcam** stops the service, and with it the **GoPro** camera in applications, until the next login or until you start it from **GoPro Webcam** in the application menu.
@@ -281,6 +282,7 @@ Run `gpwebcam doctor` first; it finds most problems on its own. The log is in `j
 | `cannot record: … read-only file system` | The service may not write to the recordings folder. With the default folder, `~/Videos` did not exist when the service started: create it and restart the service. With `-record-dir`, add `ReadWritePaths` for the folder, as in [Recording](#recording). |
 | `not enough free space to record` | Free some space; a recording needs 1 GB to start. |
 | `gpwebcam run is not running` from `gpwebcam record` | Start the service: `systemctl --user start gpwebcam`. |
+| **Power off camera** says the camera did not turn off | The command comes from GoPro's older API, which Open GoPro does not document, so a firmware may lack it (`the camera does not know the sleep command` in the log). Turn the camera off with its button. |
 | No tray icon | The desktop has no system tray (GNOME needs the AppIndicator extension), or the icon was hidden: `gpwebcam config tray on`. `gpwebcam doctor` checks both. |
 | **GoPro Webcam** in the application menu, or its notifications, show a generic icon | The panel or launcher was already running when the package was installed and still remembers the icon theme without the gpwebcam icon. Restart it, or log out and in again. |
 | `settings file not used` or `settings file changed but cannot be used` | The settings file has an unknown setting or value; the log says which. gpwebcam keeps the defaults or the last good settings. Fix it with `gpwebcam config`, or delete the file. |

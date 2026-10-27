@@ -80,9 +80,10 @@ func (s *server) view() tray.View {
 	return tray.View{
 		State: s.trayState, Status: s.trayStatus,
 		Settings: set, Locked: locked, ResPending: set.Res != s.res,
-		CanRestart: underSystemd(),
-		CanRecord:  s.present.Load() && set.Camera != settings.CameraOff,
-		Recording:  rec, RecordingSince: since,
+		CanRestart:  underSystemd(),
+		CanRecord:   s.present.Load() && set.Camera != settings.CameraOff && !s.offWanted.Load(),
+		CanPowerOff: s.present.Load() && !s.offWanted.Load(),
+		Recording:   rec, RecordingSince: since,
 	}
 }
 
@@ -115,6 +116,12 @@ func (s *server) startTray() {
 			if err := s.setRecording(on); err != nil {
 				s.log.Warn("recording from the tray", "err", err)
 				s.note(notify.Normal, "gpwebcam cannot record", err.Error())
+			}
+		},
+		PowerOff: func() {
+			if err := s.powerOff(); err != nil {
+				s.log.Warn("power off from the tray", "err", err)
+				s.note(notify.Normal, "gpwebcam cannot turn the camera off", err.Error())
 			}
 		},
 		OpenRecordings: func() {

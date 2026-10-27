@@ -42,6 +42,13 @@ func WaitingNetwork(model string) string { return model + " found, waiting for i
 func Starting(model string) string       { return "Starting " + model }
 func Retrying(model string) string       { return "No video from " + model + ", retrying" }
 
+// PoweringOff is shown with moving dots while the camera turns off.
+func PoweringOff(model string) string { return "Turning off " + model }
+
+// Off is shown after the camera was turned off from the menu, until it is
+// turned on again.
+func Off(model string) string { return model + " is off. Turn it on with its button." }
+
 const (
 	background = "0x1d2026"
 	titleColor = "white"
